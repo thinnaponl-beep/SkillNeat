@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <?!= include('Global_CSS'); ?>
+</head>
+<body class="bg-slate-50 min-h-screen flex flex-col">
+  <?!= navigationMenu ?>
+  
+  <!-- รับข้อมูล Student Data มาเตรียมไว้สำหรับการคำนวณ Rank -->
+  <div id="server-data" style="display: none;"><?= JSON.stringify(typeof studentData !== 'undefined' ? studentData : {}) ?></div>
+  
+  <div class="flex-grow w-full px-4 sm:px-8 lg:px-12 py-12 animate-fade-slide-up">
+    <div class="max-w-4xl mx-auto">
+      <div class="mb-10 flex flex-col sm:flex-row items-center justify-between gap-6">
+        <div class="text-center sm:text-left">
+          <h1 class="text-3xl md:text-4xl font-black text-slate-800 tracking-tight">ตั้งค่าโปรไฟล์</h1>
+          <p class="text-slate-400 mt-2 font-medium">จัดการข้อมูลส่วนตัวและรูปภาพของคุณให้ทันสมัยเสมอ</p>
+        </div>
+        <a href="<?= baseUrl ?>?page=student" class="px-6 py-3 bg-white border border-slate-200 text-slate-600 font-bold rounded-2xl shadow-sm hover:shadow-md hover:border-[#31c1d7] hover:text-[#31c1d7] transition-all flex items-center">
+          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+          ย้อนกลับ
+        </a>
+      </div>
+
+      <div class="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200/60 border border-slate-100 overflow-hidden">
+        <div class="h-40 bg-gradient-to-r from-[#31c1d7] to-[#1eb0c6] w-full relative">
+          <div class="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
+        </div>
+        <div class="px-8 sm:px-16 pb-16 relative">
+          <div class="flex flex-col sm:flex-row items-center sm:items-start -mt-20 mb-10 gap-8">
+            <div class="relative group">
+              <div class="w-40 h-40 rounded-[2.5rem] bg-white p-2 shadow-2xl ring-8 ring-white z-10 relative overflow-hidden">
+                <img id="current-profile-img" src="<?= (typeof userProfile !== 'undefined' && userProfile && userProfile.ProfileImage) ? userProfile.ProfileImage : 'https://ui-avatars.com/api/?name=' + encodeURIComponent((typeof userProfile !== 'undefined' && userProfile && userProfile.Nickname) ? userProfile.Nickname : userEmail) + '&background=31c1d7&color=fff&size=200' ?>" class="w-full h-full rounded-[2rem] object-cover">
+                <label for="profile-upload" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/60 text-white opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-sm rounded-[2rem]">
+                  <svg class="w-10 h-10 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                  <span class="text-xs font-black uppercase tracking-tighter">Upload</span>
+                </label>
+                <input type="file" id="profile-upload" accept="image/*" class="hidden">
+              </div>
+            </div>
+            <div class="text-center sm:text-left mt-0 sm:mt-24">
+              <div class="inline-flex items-center px-4 py-1.5 rounded-xl bg-[#31c1d7]/10 text-[#31c1d7] text-xs font-black mb-3 border border-[#31c1d7]/20 uppercase tracking-widest">
+                <?= (typeof userProfile !== 'undefined' && userProfile && userProfile.Department) ? userProfile.Department : 'General' ?>
+              </div>
+              <h2 class="text-3xl font-black text-slate-800"><?= (typeof userProfile !== 'undefined' && userProfile && userProfile.Position) ? userProfile.Position : 'พนักงาน' ?></h2>
+              <p class="text-slate-400 text-sm font-medium mt-1 font-mono"><?= userEmail ?></p>
+            </div>
+          </div>
+
+          <!-- กล่องแสดง Rank และความคืบหน้า (Profile_JS.html จะดึงข้อมูลมาเติมตรงนี้) -->
+          <div id="profile-rank-card" class="mb-10 bg-white border border-slate-100 rounded-[2rem] p-6 sm:p-8 shadow-sm w-full animate-fade-slide-up hidden">
+              <!-- โค้ดส่วนนี้จะถูกแทรกโดย Profile_JS.html -->
+          </div>
+
+          <div class="bg-slate-50 rounded-3xl p-8 sm:p-10 border border-slate-100">
+            <h3 class="text-xl font-black text-slate-800 mb-8 flex items-center">
+              <div class="w-1.5 h-6 bg-[#31c1d7] rounded-full mr-3"></div>
+              ข้อมูลพนักงาน
+            </h3>
+            <div class="grid grid-cols-1 gap-8">
+              <div>
+                <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3" for="input-fullname">ชื่อ - นามสกุลจริง</label>
+                <input type="text" id="input-fullname" value="<?= (typeof userProfile !== 'undefined' && userProfile && userProfile.FullName) ? userProfile.FullName : '' ?>" class="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-[#31c1d7]/10 focus:border-[#31c1d7] outline-none transition-all text-slate-700 font-bold">
+              </div>
+              <div>
+                <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3" for="input-nickname">ชื่อเล่น (Nickname)</label>
+                <input type="text" id="input-nickname" value="<?= (typeof userProfile !== 'undefined' && userProfile && userProfile.Nickname) ? userProfile.Nickname : '' ?>" class="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-[#31c1d7]/10 focus:border-[#31c1d7] outline-none transition-all text-slate-700 font-bold">
+              </div>
+            </div>
+            <div class="mt-12 flex justify-end">
+              <button id="save-profile-btn" class="px-10 py-4 bg-slate-800 text-white font-black rounded-2xl shadow-xl hover:bg-[#31c1d7] transition-all duration-500 transform hover:-translate-y-1">
+                บันทึกการเปลี่ยนแปลง
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="profile-loading" class="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[200] hidden flex-col justify-center items-center">
+    <div class="bg-white p-10 rounded-[2.5rem] shadow-2xl flex flex-col items-center">
+      <svg class="animate-spin h-14 w-14 text-[#31c1d7] mb-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+      <p class="text-slate-800 font-black text-xl">กำลังบันทึกข้อมูล...</p>
+    </div>
+  </div>
+  <?!= include('Profile_JS'); ?>
+</body>
+</html>
