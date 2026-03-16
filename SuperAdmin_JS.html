@@ -1,0 +1,71 @@
+<script>
+document.addEventListener('DOMContentLoaded', loadAdmins);
+
+const tableBody = document.getElementById('admins-table-body');
+const addAdminBtn = document.getElementById('add-admin-btn');
+const newAdminEmailInput = document.getElementById('new-admin-email');
+
+addAdminBtn.addEventListener('click', addNewAdmin);
+
+function loadAdmins() {
+  google.script.run.withSuccessHandler(renderAdminsTable).getAdmins();
+}
+
+function renderAdminsTable(admins) {
+  if (admins.error) {
+    tableBody.innerHTML = `<tr><td colspan="4" class="text-red-500 p-4">${admins.error}</td></tr>`;
+    return;
+  }
+  if (admins.length === 0) {
+    tableBody.innerHTML = `<tr><td colspan="4" class="text-center p-4">No admins found.</td></tr>`;
+    return;
+  }
+
+  tableBody.innerHTML = admins.map(admin => `
+    <tr class="border-b hover:bg-gray-50">
+      <td class="p-2 font-medium">${admin.Email}</td>
+      <td class="p-2 text-center"><input type="checkbox" data-email="${admin.Email}" data-permission="canEditLessons" ${admin.CanEditLessons ? 'checked' : ''} class="permission-cb h-5 w-5"></td>
+      <td class="p-2 text-center"><input type="checkbox" data-email="${admin.Email}" data-permission="canEditQuizzes" ${admin.CanEditQuizzes ? 'checked' : ''} class="permission-cb h-5 w-5"></td>
+      <td class="p-2 text-center"><input type="checkbox" data-email="${admin.Email}" data-permission="isSuperAdmin" ${admin.IsSuperAdmin ? 'checked' : ''} class="permission-cb h-5 w-5"></td>
+    </tr>
+  `).join('');
+
+  document.querySelectorAll('.permission-cb').forEach(cb => {
+    cb.addEventListener('change', updatePermissions);
+  });
+}
+
+function updatePermissions(event) {
+  const checkbox = event.target;
+  const email = checkbox.dataset.email;
+  const userCheckboxes = document.querySelectorAll(`.permission-cb[data-email="${email}"]`);
+  const permissions = {};
+  userCheckboxes.forEach(cb => {
+    permissions[cb.dataset.permission] = cb.checked;
+  });
+  google.script.run.withSuccessHandler(onUpdateSuccess).updateAdminPermissions(email, permissions);
+}
+
+function addNewAdmin() {
+    const email = newAdminEmailInput.value.trim();
+    if (!email) {
+        alert('Please enter an email.');
+        return;
+    }
+    const permissions = {
+        canEditLessons: false,
+        canEditQuizzes: false,
+        isSuperAdmin: false
+    };
+    google.script.run.withSuccessHandler(onUpdateSuccess).updateAdminPermissions(email, permissions);
+}
+
+function onUpdateSuccess(response) {
+  if (response.status === 'success') {
+    loadAdmins();
+    newAdminEmailInput.value = '';
+  } else {
+    alert('Error updating permissions: ' + response.message);
+  }
+}
+</script>
