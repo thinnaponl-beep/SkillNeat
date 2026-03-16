@@ -1,0 +1,172 @@
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // --- กำหนดตัวแปรสำหรับอ้างอิง DOM Elements ---
+    const uploadInput = document.getElementById('profile-upload');
+    const profileImg = document.getElementById('current-profile-img');
+    const fullNameInput = document.getElementById('input-fullname');
+    const nicknameInput = document.getElementById('input-nickname');
+    const saveBtn = document.getElementById('save-profile-btn');
+    const loadingOverlay = document.getElementById('profile-loading');
+    
+    // ตัวแปรสำหรับเก็บข้อมูลรูปภาพที่จะส่งไปหลังบ้าน
+    let imageDataBase64 = null; 
+    let imageMimeType = null;
+
+    // --- ฟังก์ชันแสดงการ์ด Rank (เรนเดอร์ใหม่) ---
+    function renderProfileRank() {
+        // userRankData ส่งมาจาก Navigation_Menu.html
+        if (!window.userRankData) return;
+        
+        const { bn, rank } = window.userRankData;
+        const card = document.getElementById('profile-rank-card');
+        if (!card) return;
+        
+        let progressHtml = '';
+        if(rank.next) {
+            const percent = Math.min(100, Math.round(((bn - rank.min) / (rank.next - rank.min)) * 100));
+            // ถ้ามีฟังก์ชันให้ดึงชื่อระดับถัดไปมาใช้
+            const nextRankName = typeof getUserRank === 'function' ? getUserRank(rank.next).name : 'Next Rank';
+            
+            progressHtml = `
+                <div class="mt-5 w-full">
+                    <div class="flex justify-between items-end mb-2">
+                        <span class="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Progress to ${nextRankName}</span>
+                        <span class="text-sm font-black ${rank.color}">${percent}%</span>
+                    </div>
+                    <div class="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
+                        <div class="h-full rounded-full ${rank.color} bg-current transition-all duration-1000" style="width: ${percent}%;"></div>
+                    </div>
+                    <p class="text-right text-[11px] font-bold text-slate-400 mt-2">อีก ${rank.next - bn} BN เพื่อเลื่อนระดับ</p>
+                </div>
+            `;
+        } else {
+            progressHtml = `<div class="mt-6 text-center w-full py-4 bg-amber-50 rounded-2xl border border-amber-100"><p class="text-amber-600 font-bold text-sm">🎉 สุดยอด! คุณคือปรมาจารย์ระดับสูงสุดขององค์กรแล้ว</p></div>`;
+        }
+        
+        card.innerHTML = `
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-lg font-black text-slate-800 flex items-center">
+                    <div class="w-1.5 h-6 bg-[#31c1d7] rounded-full mr-3 shadow-sm shadow-[#31c1d7]/50"></div>
+                    ระดับของคุณ (SkillNeat Rank)
+                </h3>
+            </div>
+            <div class="flex flex-col sm:flex-row items-center sm:items-start space-y-4 sm:space-y-0 sm:space-x-6">
+                <div class="w-24 h-24 rounded-[2rem] ${rank.bg} ${rank.border} border flex items-center justify-center text-5xl shadow-inner flex-shrink-0 relative overflow-hidden">
+                    <div class="absolute inset-0 bg-white/20"></div>
+                    <span class="relative z-10 drop-shadow-md">${rank.icon}</span>
+                </div>
+                <div class="flex-grow w-full text-center sm:text-left flex flex-col justify-center">
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Current Tier</p>
+                    <div class="flex flex-col sm:flex-row sm:items-end justify-center sm:justify-between mb-2">
+                        <h3 class="text-3xl font-black ${rank.color} leading-none">${rank.name} <span class="text-slate-500 text-lg font-bold ml-1 hidden sm:inline-block">(${rank.th})</span></h3>
+                        <p class="text-sm font-bold text-slate-500 mt-2 sm:mt-0">คะแนนสะสม <span class="text-slate-800 font-black text-lg ml-1">${bn} BN</span></p>
+                    </div>
+                    ${progressHtml}
+                </div>
+            </div>
+        `;
+        card.classList.remove('hidden');
+    }
+
+    // เรียกฟังก์ชันเรนเดอร์ Rank ทุกครั้งที่ข้อมูลถูกเตรียมพร้อมแล้ว
+    document.addEventListener('rankDataReady', renderProfileRank);
+    // เผื่อข้อมูลพร้อมก่อนหน้านี้
+    renderProfileRank();
+
+    // --- ฟังก์ชันแจ้งเตือน (Toast Notification) ---
+    function showNotification(message, type = 'success') {
+        const toast = document.createElement('div');
+        
+        const icon = type === 'success' 
+            ? '<div class="flex-shrink-0 w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center"><svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg></div>'
+            : '<div class="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 flex items-center justify-center"><svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"></path></svg></div>';
+        
+        toast.className = 'fixed top-6 right-6 flex items-center p-4 bg-white/95 backdrop-blur-xl border border-slate-100 rounded-2xl shadow-2xl z-[9999] transform transition-all duration-500 translate-x-full opacity-0 max-w-sm';
+        
+        toast.innerHTML = `
+            ${icon}
+            <div class="ml-4">
+                <h4 class="text-sm font-bold text-slate-900">${type === 'success' ? 'สำเร็จ!' : 'ข้อผิดพลาด'}</h4>
+                <p class="text-sm text-slate-500 mt-0.5 leading-tight">${message}</p>
+            </div>
+        `;
+        
+        document.body.appendChild(toast);
+        requestAnimationFrame(() => toast.classList.remove('translate-x-full', 'opacity-0'));
+        
+        setTimeout(() => {
+            toast.classList.add('translate-x-full', 'opacity-0');
+            setTimeout(() => toast.remove(), 500); 
+        }, 3500);
+    }
+
+    // --- ฟังก์ชัน 1: จัดการเมื่อมีการเลือกไฟล์รูปภาพ (Preview) ---
+    uploadInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            if (file.size > 2 * 1024 * 1024) {
+                showNotification('ขนาดไฟล์รูปภาพใหญ่เกินไป (ไม่เกิน 2MB)', 'error');
+                uploadInput.value = '';
+                return;
+            }
+            imageMimeType = file.type;
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const base64String = event.target.result;
+                profileImg.src = base64String;
+                imageDataBase64 = base64String.split(',')[1]; 
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+
+    // --- ฟังก์ชัน 2: จัดการเมื่อกดปุ่มบันทึกข้อมูล ---
+    saveBtn.addEventListener('click', function() {
+        const fullName = fullNameInput.value.trim();
+        const nickname = nicknameInput.value.trim();
+
+        if (!fullName || !nickname) {
+            showNotification('กรุณากรอกชื่อ-นามสกุล และชื่อเล่นให้ครบถ้วน', 'error');
+            return;
+        }
+
+        loadingOverlay.classList.remove('hidden');
+        loadingOverlay.classList.add('flex');
+
+        const payload = {
+            fullName: fullName,
+            nickname: nickname,
+            imageData: imageDataBase64,
+            imageMimeType: imageMimeType
+        };
+
+        google.script.run
+            .withSuccessHandler(function(response) {
+                loadingOverlay.classList.add('hidden');
+                loadingOverlay.classList.remove('flex');
+                
+                if (response.status === 'success') {
+                    showNotification('บันทึกข้อมูลโปรไฟล์เรียบร้อยแล้ว!', 'success');
+                    
+                    const navNameSpan = document.querySelector('nav .flex-col span[title]');
+                    if (navNameSpan) navNameSpan.textContent = nickname;
+
+                    const navProfileImg = document.querySelector('nav img[alt="Profile"]');
+                    if (navProfileImg && profileImg.src) navProfileImg.src = profileImg.src;
+                    
+                    imageDataBase64 = null;
+                    uploadInput.value = '';
+                    
+                } else {
+                    showNotification('เกิดข้อผิดพลาด: ' + response.message, 'error');
+                }
+            })
+            .withFailureHandler(function(error) {
+                loadingOverlay.classList.add('hidden');
+                loadingOverlay.classList.remove('flex');
+                showNotification('เชื่อมต่อเซิร์ฟเวอร์ล้มเหลว กรุณาลองใหม่', 'error');
+            })
+            .updateUserProfile(payload);
+    });
+});
+</script>
