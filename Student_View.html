@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;700;800&display=swap" rel="stylesheet">
+  
+  <?!= include('Global_CSS'); ?>
+</head>
+<body class="bg-[#f8fafc] min-h-screen flex flex-col font-sans">
+
+  <!-- แถบเมนูด้านบน -->
+  <?!= navigationMenu ?>
+
+  <!-- ข้อมูลซ่อนสำหรับให้ JS เรียกใช้ -->
+  <div id="server-data" style="display: none;"><?= JSON.stringify(studentData) ?></div>
+
+  <!-- แก้ไขความกว้างตรงนี้: เปลี่ยนจาก max-w-7xl เป็น w-full และใช้ Padding ให้ตรงกับ Navbar -->
+  <div id="app-container" class="w-full px-4 sm:px-8 lg:px-12 py-8 mx-auto animate-fade-slide-up flex-grow">
+    
+    <div id="student-main-content">
+      <div id="loading" class="text-center py-20 flex flex-col items-center justify-center">
+         <svg class="animate-spin h-10 w-10 text-[#0cc0df] mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+         </svg>
+         <p class="text-gray-500 font-medium text-lg">กำลังเตรียมเนื้อหาบทเรียน...</p>
+      </div>
+      
+      <!-- หน้าหลัก -->
+      <main id="lesson-list" class="view-section hidden"></main>
+      
+      <!-- หน้าคอร์สเรียนของฉัน -->
+      <main id="my-courses-view" class="view-section hidden"></main>
+      
+      <!-- หน้าดูวิดีโอและทำข้อสอบ -->
+      <section id="video-player" class="view-section hidden"></section>
+      <section id="quiz" class="view-section hidden"></section>
+    </div>
+
+  </div>
+
+  <!-- Modal สำหรับรายละเอียดคอร์ส -->
+  <div id="lesson-details-modal" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-[200] flex justify-center items-center p-4 sm:p-6 opacity-0 transition-opacity duration-300 [&:not(.hidden)]:opacity-100">
+      <div class="bg-white rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col transform scale-95 transition-transform duration-300 [&:not(.hidden)]:scale-100">
+          <div id="lesson-details-content" class="p-6 sm:p-10 overflow-y-auto custom-scrollbar"></div>
+      </div>
+  </div>
+
+  <?!= include('Student_JS'); ?>
+</body>
+</html>
