@@ -1,0 +1,728 @@
+<script>
+/* ==========================================
+   1. ตัวแปรและสถานะเริ่มต้น (Global State)
+========================================== */
+const serverDataElement = document.getElementById('server-data');
+const studentData = JSON.parse(serverDataElement.textContent || '{}');
+
+// [CRITICAL FIX] บังคับจัดการโครงสร้าง userInfo และ progress ให้เป็น Array เสมอ เพื่อการอัปเดตแบบ Real-time
+if (!studentData.userInfo) studentData.userInfo = {};
+let rawProgress = studentData.userInfo.progress || studentData.progress || [];
+if (typeof rawProgress === 'string') {
+    try { rawProgress = JSON.parse(rawProgress); } 
+    catch(e) { rawProgress = rawProgress.split(',').map(s => s.trim()).filter(s => s); }
+}
+if (!Array.isArray(rawProgress)) rawProgress = [];
+studentData.userInfo.progress = rawProgress;
+
+const userInfo = studentData.userInfo;
+const lessons = studentData.lessons || [];
+
+const views = {
+    loading: document.getElementById('loading'),
+    lessonList: document.getElementById('lesson-list'),
+    myCoursesView: document.getElementById('my-courses-view'),
+    videoPlayer: document.getElementById('video-player'),
+    quiz: document.getElementById('quiz')
+};
+
+let currentLesson = null;
+let currentSectionIndex = 0;
+let player = null;
+let latestTimestampWatched = 0;
+let quizQuestions = [];
+let quizAnswers = [];
+let progressSaveTimeout = null;
+
+// ตัวแปรสำหรับป้องกันการกรอวิดีโอ (Anti-Skip)
+let maxTimeWatched = 0;
+let videoTrackerInterval = null;
+
+// ตัวแปรสำหรับเช็คสถานะจอเล็ก
+let isMiniPlayer = false;
+
+/* ==========================================
+   2. การนำทางและควบคุมหน้า (Routing & Views)
+========================================== */
+function showView(viewId) {
+    Object.values(views).forEach(v => {
+        // หากเป็นการแสดงผลจอเล็ก ห้ามซ่อน videoPlayer
+        if (v === views.videoPlayer && isMiniPlayer) {
+            // ไม่ต้องทำอะไร ปล่อยให้มันลอยอยู่
+        } else {
+            v.classList.add('hidden');
+        }
+    });
+    
+    if (viewId === 'lessonList') {
+        views.lessonList.classList.remove('hidden');
+        renderLessonList();
+    } else if (viewId === 'myCoursesView') {
+        views.myCoursesView.classList.remove('hidden');
+        renderMyCourses();
+    } else if (views[viewId]) {
+        views[viewId].classList.remove('hidden');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const tag = document.createElement('script');
+    tag.src = "https://www.youtube.com/iframe_api";
+    const firstScriptTag = document.getElementsByTagName('script')[0];
+    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+    let urlParams = new URLSearchParams('');
+    if (typeof google !== 'undefined' && google.script && google.script.url) {
+        google.script.url.getLocation(function(location) {
+            urlParams = new URLSearchParams(location.parameter);
+            initApp(urlParams);
+        });
+    } else {
+        urlParams = new URLSearchParams(window.location.search);
+        initApp(urlParams);
+    }
+});
+
+function initApp(urlParams) {
+    const tab = urlParams.get('tab');
+    if (tab === 'mycourses') {
+        showView('myCoursesView');
+    } else {
+        showView('lessonList');
+    }
+}
+
+/* ==========================================
+   3. ฟังก์ชันคำนวณและช่วยเหลือ (Helpers)
+========================================== */
+function getLessonProgressStats(lesson) {
+    if (!lesson.sections || lesson.sections.length === 0) return { total: 0, done: 0, percent: 0, isCompleted: false };
+    const total = lesson.sections.length;
+    const done = lesson.sections.filter(s => userInfo.progress.includes(s.SectionID)).length;
+    const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+    return { total: total, done: done, percent: percent, isCompleted: done === total && total > 0 };
+}
+
+function getThumbnailUrl(lesson) {
+    if (lesson.sections && lesson.sections.length > 0 && lesson.sections[0].YouTubeVideoID) {
+        return 'https://img.youtube.com/vi/' + lesson.sections[0].YouTubeVideoID + '/maxresdefault.jpg';
+    }
+    return 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80';
+}
+
+function showToast(message, type = 'success') {
+    const toast = document.createElement('div');
+    const icon = type === 'success' 
+        ? '<div class="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center mr-3"><svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg></div>'
+        : '<div class="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center mr-3"><svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"></path></svg></div>';
+    
+    toast.className = 'fixed top-6 right-6 flex items-center p-4 bg-white/95 backdrop-blur-xl border border-slate-100 rounded-2xl shadow-xl z-[9999] transform transition-all duration-300 translate-x-full opacity-0 max-w-sm';
+    toast.innerHTML = icon + '<div><p class="text-sm font-bold text-slate-800">' + message + '</p></div>';
+    
+    document.body.appendChild(toast);
+    requestAnimationFrame(() => toast.classList.remove('translate-x-full', 'opacity-0'));
+    
+    setTimeout(() => {
+        toast.classList.add('translate-x-full', 'opacity-0');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+/* ==========================================
+   4. หน้าหลักการเรียนรู้ (Lesson List)
+========================================== */
+function renderLessonList() {
+    const container = views.lessonList;
+    views.loading.classList.add('hidden');
+    
+    const featured = studentData.featuredLessons || [];
+    const personalized = studentData.personalizedLessons || [];
+    
+    // โชว์เฉพาะคอร์สที่ยังเรียนไม่จบ
+    const notStartedFeatured = featured.filter(l => getLessonProgressStats(l).done < (l.sections ? l.sections.length : 0));
+    const notStartedPersonalized = personalized.filter(l => getLessonProgressStats(l).done < (l.sections ? l.sections.length : 0));
+    
+    const profile = userInfo.profile || {};
+    const dept = profile.Department || 'ส่วนกลาง';
+
+    let html = '<div class="grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-8 items-start pt-2">' +
+        '<div class="lg:col-span-3 space-y-8">' +
+        '<div class="bg-slate-900 rounded-[2rem] py-10 px-8 sm:px-10 shadow-2xl flex items-center justify-between overflow-hidden relative">' +
+        '<div class="absolute top-0 right-0 -mr-20 -mt-20 w-[20rem] h-[20rem] rounded-full bg-[#31c1d7] blur-[90px] opacity-20"></div>' +
+        '<div class="absolute bottom-0 left-10 w-40 h-40 rounded-full bg-[#1eb0c6] blur-[60px] opacity-10"></div>' +
+        '<div class="relative z-10">' +
+        '<h2 class="text-2xl sm:text-3xl font-black text-white tracking-wide leading-tight mb-2">อัปสกิลอนาคต<br>ยกระดับศักยภาพด้วย <span class="text-[#31c1d7]">SkillNeat</span></h2>' +
+        '<p class="text-slate-400 font-medium text-sm sm:text-base max-w-sm">คัดสรรเนื้อหาคุณภาพ เพื่อการเติบโตอย่างก้าวกระโดด</p>' +
+        '</div>' +
+        '<div class="hidden sm:block relative z-10 opacity-80">' +
+        '<svg class="w-24 h-24 text-[#31c1d7]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>' +
+        '</div>' +
+        '</div>' +
+        '<div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">';
+        
+    if (notStartedFeatured.length > 0) { 
+        html += notStartedFeatured.map(l => renderModernCard(l)).join(''); 
+    } else { 
+        html += '<div class="col-span-full text-center p-10 bg-white rounded-[1.5rem] border border-slate-100"><p class="text-slate-400 font-medium">ไม่มีคอร์สใหม่ในหมวดหมู่นี้</p></div>'; 
+    }
+    
+    html += '</div></div>' +
+        '<div class="lg:col-span-1 sticky top-24">' +
+        '<div class="bg-white rounded-[2rem] p-6 sm:p-8 shadow-sm border border-slate-100">' +
+        '<div class="flex items-center space-x-3 mb-6"><div class="w-1.5 h-6 bg-[#31c1d7] rounded-full shadow-[0_0_10px_rgba(49,193,215,0.5)]"></div><h2 class="text-lg sm:text-xl font-extrabold text-slate-800">สำหรับแผนก ' + dept + '</h2></div>' +
+        '<div class="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">';
+        
+    if (notStartedPersonalized.length > 0) { 
+        html += notStartedPersonalized.map(l => renderHorizontalCard(l)).join(''); 
+    } else { 
+        html += '<div class="text-center p-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200"><p class="text-slate-400 font-bold text-sm">คุณเรียนครบหมดแล้ว!</p></div>'; 
+    }
+    
+    html += '</div></div></div></div>';
+    
+    container.innerHTML = html;
+}
+
+function renderMyCourses() {
+    const container = views.myCoursesView;
+    const inProgress = lessons.filter(l => {
+        const stats = getLessonProgressStats(l);
+        return stats.done > 0 && !stats.isCompleted;
+    });
+    const completed = lessons.filter(l => getLessonProgressStats(l).isCompleted);
+
+    let html = '<header class="mb-10 mt-2 pl-2">' +
+        '<h1 class="text-3xl md:text-4xl font-extrabold text-slate-800 tracking-tight">คอร์สเรียนของฉัน</h1>' +
+        '<p class="text-slate-500 mt-2 text-lg">ติดตามความคืบหน้าและทบทวนบทเรียนของคุณ</p>' +
+        '</header>';
+
+    html += '<h2 class="text-xl font-bold text-slate-800 mb-5 flex items-center"><span class="text-[#31c1d7] mr-2">⏳</span> กำลังเรียน</h2>';
+    if (inProgress.length > 0) {
+        html += '<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 mb-12">' + inProgress.map(l => renderModernCard(l)).join('') + '</div>';
+    } else {
+        html += '<div class="text-center p-12 bg-white rounded-3xl border border-slate-100 mb-12"><p class="text-slate-400 font-medium">ยังไม่มีคอร์สที่กำลังเรียน</p></div>';
+    }
+
+    html += '<h2 class="text-xl font-bold text-slate-800 mb-5 flex items-center"><span class="text-emerald-500 mr-2">✅</span> เรียนจบแล้ว</h2>';
+    if (completed.length > 0) {
+        html += '<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 mb-12">' + completed.map(l => renderModernCard(l)).join('') + '</div>';
+    } else {
+        html += '<div class="text-center p-12 bg-white rounded-3xl border border-slate-100 mb-12"><p class="text-slate-400 font-medium">ยังไม่มีคอร์สที่เรียนจบ</p></div>';
+    }
+
+    container.innerHTML = html;
+}
+
+/* ==========================================
+   5. คอมโพเนนต์การ์ด (Cards)
+========================================== */
+function renderModernCard(lesson) {
+    const stats = getLessonProgressStats(lesson);
+    const thumbnailUrl = getThumbnailUrl(lesson);
+    const category = lesson.Category || 'ทั่วไป';
+    const pbColor = stats.isCompleted ? 'bg-emerald-500' : 'bg-[#31c1d7]';
+    const btnClass = stats.isCompleted 
+        ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white' 
+        : 'bg-slate-50 text-slate-700 hover:bg-[#31c1d7] hover:text-white hover:shadow-sm hover:shadow-[#31c1d7]/20';
+        
+    return '<div class="modern-card flex flex-col h-full group cursor-pointer" onclick="showLessonDetails(\'' + lesson.LessonID + '\')">' +
+        '<div class="relative h-28 sm:h-32 w-full bg-slate-100 overflow-hidden flex-shrink-0">' +
+        '<img src="' + thumbnailUrl + '" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700">' +
+        '<div class="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>' +
+        '<div class="absolute top-2 left-2 bg-white/95 backdrop-blur-sm text-[#31c1d7] text-[9px] font-black px-2 py-1 rounded-md uppercase shadow-sm">' + category + '</div>' +
+        '</div>' +
+        '<div class="p-3.5 sm:p-4 flex-grow flex flex-col justify-between bg-white">' +
+        '<div><h3 class="text-[13px] sm:text-[14px] font-bold text-slate-800 leading-snug mb-1.5 line-clamp-2 group-hover:text-[#31c1d7] transition-colors">' + lesson.Title + '</h3>' +
+        '<p class="text-slate-500 text-[11px] line-clamp-2 leading-relaxed">' + lesson.Description + '</p></div>' +
+        '<div class="mt-4 pt-3 border-t border-slate-100">' +
+        '<div class="flex justify-between items-center text-[10px] font-bold mb-1.5"><span class="text-slate-400 uppercase tracking-wider">Progress</span><span class="' + (stats.isCompleted ? 'text-emerald-500' : 'text-[#31c1d7]') + '">' + stats.percent + '%</span></div>' +
+        '<div class="bg-slate-100 rounded-full h-1 w-full mb-3.5 overflow-hidden"><div class="' + pbColor + ' h-full rounded-full transition-all duration-1000" style="width:' + stats.percent + '%"></div></div>' +
+        '<button class="w-full font-bold py-2 rounded-xl transition-all text-[12px] border border-transparent ' + btnClass + '">' + (stats.isCompleted ? 'ทบทวนเนื้อหา' : (stats.done > 0 ? 'เรียนต่อ' : 'เริ่มเรียน')) + '</button>' +
+        '</div></div></div>';
+}
+
+function renderHorizontalCard(lesson) {
+    const stats = getLessonProgressStats(lesson);
+    const thumbnailUrl = getThumbnailUrl(lesson);
+    
+    return '<div class="group flex p-3 bg-white border border-slate-100 rounded-2xl hover:border-[#31c1d7]/50 hover:shadow-md transition-all cursor-pointer" onclick="showLessonDetails(\'' + lesson.LessonID + '\')">' +
+        '<div class="w-24 h-20 rounded-xl overflow-hidden flex-shrink-0 relative">' +
+        '<img src="' + thumbnailUrl + '" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500">' +
+        (stats.isCompleted ? '<div class="absolute inset-0 bg-emerald-500/20 backdrop-blur-[2px] flex items-center justify-center"><svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg></div>' : '') +
+        '</div>' +
+        '<div class="ml-4 flex flex-col justify-center flex-grow">' +
+        '<h4 class="text-sm font-bold text-slate-800 line-clamp-2 group-hover:text-[#31c1d7] transition-colors">' + lesson.Title + '</h4>' +
+        '<div class="flex items-center mt-2 text-[10px] font-bold ' + (stats.isCompleted ? 'text-emerald-500' : 'text-slate-400') + '">' +
+        (stats.isCompleted ? 'เรียนจบแล้ว' : (stats.done > 0 ? 'เรียนไปแล้ว ' + stats.percent + '%' : 'ยังไม่เริ่มเรียน')) +
+        '</div>' +
+        '</div></div>';
+}
+
+/* ==========================================
+   6. ระบบ Popup รายละเอียดคอร์สเรียน
+========================================== */
+function showLessonDetails(lessonId) {
+    const lesson = lessons.find(l => l.LessonID === lessonId);
+    if (!lesson) return;
+    
+    const modal = document.getElementById('lesson-details-modal');
+    const content = document.getElementById('lesson-details-content');
+    const thumbnailUrl = getThumbnailUrl(lesson);
+    const stats = getLessonProgressStats(lesson);
+
+    let html = '<div class="flex justify-between items-start mb-8">' +
+        '<div class="flex space-x-6 items-start">' +
+        '<img src="' + thumbnailUrl + '" class="w-32 h-24 object-cover rounded-2xl shadow-sm hidden sm:block">' +
+        '<div><h2 class="text-2xl sm:text-3xl font-extrabold text-slate-800 leading-tight mb-2">' + lesson.Title + '</h2>' +
+        '<div class="flex items-center space-x-3 text-sm"><span class="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg font-bold">' + lesson.sections.length + ' บทเรียน</span>' +
+        '<span class="' + (stats.isCompleted ? 'text-emerald-500' : 'text-[#31c1d7]') + ' font-bold">' + (stats.isCompleted ? 'เรียนจบแล้ว' : 'เรียนไปแล้ว ' + stats.done + '/' + stats.total) + '</span>' +
+        '</div></div></div>' +
+        '<button onclick="closeLessonDetailsModal()" class="text-slate-400 hover:text-slate-800 bg-slate-50 hover:bg-slate-100 rounded-full p-2 transition-colors"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>' +
+        '</div>';
+
+    if (lesson.Description) {
+        html += '<div class="mb-8 p-5 bg-slate-50 rounded-2xl text-slate-600 text-sm leading-relaxed border border-slate-100">' + lesson.Description + '</div>';
+    }
+
+    html += '<div class="space-y-4">';
+    lesson.sections.forEach((sec, index) => {
+        const isDone = userInfo.progress.includes(sec.SectionID);
+        const icon = isDone 
+            ? '<div class="w-8 h-8 rounded-full bg-emerald-100 text-emerald-500 flex items-center justify-center flex-shrink-0 shadow-sm"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg></div>'
+            : '<div class="w-8 h-8 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center flex-shrink-0 font-bold text-sm shadow-sm">' + (index + 1) + '</div>';
+        
+        let subText = sec.hasQuiz ? '<span class="text-violet-500 bg-violet-50 px-2 py-0.5 rounded text-[10px] uppercase tracking-wider ml-3 border border-violet-100">มีแบบทดสอบ</span>' : '';
+        if (sec.quizScore) {
+            const passed = (sec.quizScore.Score / sec.quizScore.TotalQuestions) >= 0.5;
+            subText += passed ? '<span class="text-emerald-500 text-xs ml-3">สอบผ่านแล้ว</span>' : '<span class="text-rose-500 text-xs ml-3">สอบไม่ผ่าน</span>';
+        }
+
+        html += '<div class="flex items-center justify-between p-4 bg-white border ' + (isDone ? 'border-emerald-100 bg-emerald-50/30' : 'border-slate-100 hover:border-[#31c1d7]/40') + ' rounded-2xl transition-all group">' +
+            '<div class="flex items-center space-x-4"><div class="flex-shrink-0">' + icon + '</div>' +
+            '<div><h4 class="text-[15px] font-bold text-slate-800 group-hover:text-[#31c1d7] transition-colors">' + sec.Title + subText + '</h4></div></div>' +
+            '<button onclick="playSection(\'' + lesson.LessonID + '\', ' + index + ')" class="px-5 py-2 ' + (isDone ? 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50' : 'bg-[#31c1d7] text-white hover:bg-[#1eb0c6] shadow-sm shadow-[#31c1d7]/20') + ' rounded-xl font-bold text-sm transition-all">' + (isDone ? 'เรียนซ้ำ' : 'เริ่มเรียน') + '</button>' +
+            '</div>';
+    });
+    html += '</div>';
+
+    content.innerHTML = html;
+    modal.classList.remove('hidden');
+}
+
+function closeLessonDetailsModal() {
+    document.getElementById('lesson-details-modal').classList.add('hidden');
+}
+
+/* ==========================================
+   7. ระบบเล่นวิดีโอ (YouTube Player) + จอเล็ก (Mini-Player)
+========================================== */
+
+function minimizeVideo(backViewStr) {
+    isMiniPlayer = true;
+    views.videoPlayer.classList.add('fixed', 'bottom-6', 'right-6', 'w-80', 'sm:w-96', 'z-[200]', 'transition-all', 'duration-500');
+    document.getElementById('video-back-btn').classList.add('hidden');
+    document.getElementById('video-header').classList.add('hidden');
+    const wrapper = document.getElementById('video-wrapper');
+    wrapper.classList.remove('p-6', 'sm:p-8', 'shadow-xl', 'border', 'border-slate-100', 'bg-white');
+    wrapper.classList.add('shadow-2xl', 'rounded-2xl', 'overflow-hidden');
+    document.getElementById('mini-player-controls').classList.remove('hidden');
+    showView(backViewStr);
+}
+
+function expandVideo() {
+    isMiniPlayer = false;
+    views.videoPlayer.classList.remove('fixed', 'bottom-6', 'right-6', 'w-80', 'sm:w-96', 'z-[200]', 'transition-all', 'duration-500');
+    document.getElementById('video-back-btn').classList.remove('hidden');
+    document.getElementById('video-header').classList.remove('hidden');
+    const wrapper = document.getElementById('video-wrapper');
+    wrapper.classList.add('p-6', 'sm:p-8', 'shadow-xl', 'border', 'border-slate-100', 'bg-white');
+    wrapper.classList.remove('shadow-2xl', 'rounded-2xl', 'overflow-hidden');
+    document.getElementById('mini-player-controls').classList.add('hidden');
+    showView('videoPlayer');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function closeVideo() {
+    isMiniPlayer = false;
+    if (player) {
+        player.destroy();
+        player = null;
+    }
+    if (progressSaveTimeout) {
+        clearInterval(progressSaveTimeout);
+        progressSaveTimeout = null;
+    }
+    // ยกเลิกระบบจับเวลาป้องกันการกรอเมื่อปิดวิดีโอ
+    if (videoTrackerInterval) {
+        clearInterval(videoTrackerInterval);
+        videoTrackerInterval = null;
+    }
+    
+    views.videoPlayer.classList.remove('fixed', 'bottom-6', 'right-6', 'w-80', 'sm:w-96', 'z-[200]', 'transition-all', 'duration-500');
+    views.videoPlayer.classList.add('hidden');
+    views.videoPlayer.innerHTML = '';
+}
+
+function togglePlayPause() {
+    if (player) {
+        const state = player.getPlayerState();
+        const ppIcon = document.getElementById('play-pause-icon');
+        if (state === YT.PlayerState.PLAYING) {
+            player.pauseVideo();
+            if (ppIcon) ppIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>'; 
+        } else {
+            player.playVideo();
+            if (ppIcon) ppIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>'; 
+        }
+    }
+}
+
+function playSection(lessonId, sectionIndex) {
+    closeLessonDetailsModal();
+    if (isMiniPlayer) closeVideo();
+    
+    currentLesson = lessons.find(l => l.LessonID === lessonId);
+    currentSectionIndex = sectionIndex;
+    const section = currentLesson.sections[currentSectionIndex];
+    
+    // ตั้งค่าเวลาเริ่มต้น และรีเซ็ตเวลาดูสูงสุดสำหรับฟีเจอร์ป้องกันการกรอ
+    latestTimestampWatched = section.latestTimestamp || 0;
+    maxTimeWatched = latestTimestampWatched; 
+    
+    const backViewStr = (new URLSearchParams(window.location.search).get('tab') === 'mycourses') ? 'myCoursesView' : 'lessonList';
+    
+    views.videoPlayer.innerHTML = '<div id="video-main-container" class="max-w-4xl mx-auto w-full transition-all duration-300">' +
+        '<button id="video-back-btn" onclick="minimizeVideo(\'' + backViewStr + '\')" class="mb-6 text-slate-500 font-bold py-2 px-4 rounded-xl hover:bg-slate-100 inline-flex items-center transition-all" title="ย่อวิดีโอเป็นจอเล็ก">&larr; ย่อวิดีโอกลับหน้าหลัก</button>' +
+        '<div id="video-wrapper" class="bg-white p-6 sm:p-8 rounded-[2rem] shadow-xl border border-slate-100 relative transition-all duration-300">' +
+        '<div id="video-header" class="mb-6 flex flex-col sm:flex-row sm:items-end justify-between gap-4">' +
+        '<div><span class="text-[11px] font-black text-[#31c1d7] tracking-[0.2em] uppercase mb-2 block">Now Learning</span>' +
+        '<h2 class="text-2xl sm:text-3xl font-extrabold text-slate-800 leading-tight">' + section.Title + '</h2>' +
+        '<p class="text-slate-500 mt-2 font-medium text-base">' + currentLesson.Title + '</p></div>' +
+        '</div>' +
+        '<div class="relative w-full aspect-video rounded-2xl overflow-hidden bg-slate-900 shadow-inner group">' +
+        '<div id="player" class="absolute top-0 left-0 w-full h-full"></div>' + 
+        '<div id="video-ended-message" class="absolute inset-0 bg-slate-900/95 backdrop-blur-md hidden flex-col justify-center items-center z-30 animate-fade-slide-up p-4"></div>' +
+        
+        '<div id="mini-player-controls" class="hidden absolute inset-0 bg-slate-900/50 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-20 backdrop-blur-[2px]">' +
+        '<button onclick="togglePlayPause()" class="w-12 h-12 bg-white/20 hover:bg-[#31c1d7] text-white rounded-full flex items-center justify-center backdrop-blur-md transition-all">' +
+        '<svg id="play-pause-icon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></button>' +
+        '<button onclick="expandVideo()" class="w-10 h-10 bg-white/20 hover:bg-emerald-500 text-white rounded-full flex items-center justify-center backdrop-blur-md transition-all" title="ขยายเต็มจอ">' +
+        '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg></button>' +
+        '<button onclick="closeVideo()" class="w-10 h-10 bg-white/20 hover:bg-rose-500 text-white rounded-full flex items-center justify-center backdrop-blur-md transition-all" title="ปิดวิดีโอ">' +
+        '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>' +
+        '</div>' +
+        '</div>' +
+        '</div></div>';
+    
+    showView('videoPlayer');
+    if (player) player.destroy();
+    loadYouTubePlayer(section.YouTubeVideoID, latestTimestampWatched);
+}
+
+function loadYouTubePlayer(videoId, startSeconds) {
+    if (typeof YT === 'undefined' || typeof YT.Player === 'undefined') {
+        setTimeout(() => loadYouTubePlayer(videoId, startSeconds), 500);
+        return;
+    }
+    player = new YT.Player('player', {
+        height: '100%',
+        width: '100%',
+        videoId: videoId,
+        playerVars: { 'autoplay': 1, 'start': startSeconds, 'rel': 0, 'modestbranding': 1, 'playsinline': 1 },
+        events: { 'onReady': onPlayerReady, 'onStateChange': onPlayerStateChange }
+    });
+}
+
+function onPlayerReady(event) { }
+
+function onPlayerStateChange(event) {
+    const ppIcon = document.getElementById('play-pause-icon');
+    
+    // ป้องกันการกรอวิดีโอทันทีเมื่อวิดีโอกำลังโหลดบัฟเฟอร์ หรือ เล่น
+    if (event.data == YT.PlayerState.PLAYING || event.data == YT.PlayerState.BUFFERING) {
+        checkVideoSkip();
+    }
+
+    if (event.data == YT.PlayerState.PLAYING) {
+        if (progressSaveTimeout) clearInterval(progressSaveTimeout);
+        progressSaveTimeout = setInterval(saveVideoProgress, 10000); 
+        
+        // ตรวจจับการกรอแบบถี่ยิบ ทุกๆ 0.5 วินาที
+        if (!videoTrackerInterval) {
+            videoTrackerInterval = setInterval(checkVideoSkip, 500);
+        }
+
+        if (ppIcon) ppIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
+    } else {
+        if (progressSaveTimeout) clearInterval(progressSaveTimeout);
+        
+        if (event.data == YT.PlayerState.PAUSED && ppIcon) {
+            ppIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
+        }
+    }
+
+    if (event.data == YT.PlayerState.ENDED) {
+        if (videoTrackerInterval) {
+            clearInterval(videoTrackerInterval);
+            videoTrackerInterval = null;
+        }
+        if (isMiniPlayer) expandVideo();
+        showVideoEndedMessage();
+    }
+}
+
+// ฟังก์ชันป้องกันการกรอวิดีโอ (Anti-Skip)
+function checkVideoSkip() {
+    if (player && typeof player.getCurrentTime === 'function') {
+        const currentTime = player.getCurrentTime();
+        const section = currentLesson.sections[currentSectionIndex];
+        
+        // หากเคยเรียนจบคอร์สนี้ไปแล้ว ให้สามารถกรอไปมาได้อิสระ
+        const isAlreadyCompleted = userInfo.progress.includes(section.SectionID);
+        // หากผู้ใช้มีสิทธิ์ SuperAdmin ให้กรอได้อิสระเพื่อทดสอบ
+        const isSuperAdminUser = document.querySelector('a[data-page="superadmin"]') !== null;
+        
+        if (isSuperAdminUser || isAlreadyCompleted) {
+            if (currentTime > maxTimeWatched) maxTimeWatched = currentTime;
+            return;
+        }
+
+        // สำหรับผู้เรียนปกติที่เพิ่งดูครั้งแรก: ห้ามกรอข้ามเวลาที่เคยดูสูงสุดเกิน 2 วินาที
+        if (currentTime > maxTimeWatched + 2) {
+            player.seekTo(maxTimeWatched); // ดึงกลับที่เดิมทันที
+            showToast('ไม่อนุญาตให้กรอวิดีโอข้ามเนื้อหาครับ 🚫', 'error');
+        } else {
+            // อนุญาตให้กรอกลับหลังไปทบทวนได้ และจำเวลาสูงสุดที่ดูไป
+            if (currentTime > maxTimeWatched) {
+                maxTimeWatched = currentTime;
+            }
+        }
+    }
+}
+
+function saveVideoProgress() {
+    if (player && typeof player.getCurrentTime === 'function') {
+        const sectionId = currentLesson.sections[currentSectionIndex].SectionID;
+        google.script.run.updateLatestTimestamp({ sectionId: sectionId, timestamp: Math.floor(maxTimeWatched) });
+    }
+}
+
+// -------------------------------------------------------------
+// อัปเดต: ให้คะแนน BN ทันทีเมื่อวิดีโอจบ พร้อม Pop-up แจ้งเตือน
+// -------------------------------------------------------------
+function showVideoEndedMessage() {
+    const msgBox = document.getElementById('video-ended-message');
+    const section = currentLesson.sections[currentSectionIndex];
+    let vp = parseInt(section.VideoPoints);
+    if (isNaN(vp)) vp = 10;
+    
+    let newlyCompleted = false;
+    
+    // ตรวจสอบและบันทึกว่าวิดีโอนี้เพิ่งเรียนจบครั้งแรก
+    if (!userInfo.progress.includes(section.SectionID)) {
+        userInfo.progress.push(section.SectionID);
+        newlyCompleted = true;
+        
+        google.script.run.withSuccessHandler(() => {
+            showToast('บันทึกความคืบหน้าเรียบร้อยแล้ว');
+        }).recordProgress(section.SectionID);
+        
+        // [อัปเดตใหม่] สั่งให้ Navbar บวกคะแนนให้พนักงาน "ทันที" โดยไม่รอโหลดข้อมูลใหม่
+        if (typeof window.updateNavbarRank === 'function') window.updateNavbarRank(null, vp);
+    }
+
+    let html = '<div class="w-16 h-16 sm:w-20 sm:h-20 bg-emerald-500 rounded-full flex items-center justify-center mb-4 sm:mb-6 shadow-lg shadow-emerald-500/30"><svg class="w-8 h-8 sm:w-10 sm:h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg></div>' +
+        '<h3 class="text-2xl sm:text-3xl font-black text-white mb-2">เรียนจบวิดีโอนี้แล้ว!</h3>';
+        
+    // โชว์ป้ายรับคะแนนวิดีโอ
+    if (newlyCompleted) {
+         html += '<div class="inline-flex items-center px-4 py-2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl mb-6 shadow-sm"><span class="text-xl mr-2">⭐</span><span class="font-bold">ได้รับคะแนนเรียนจบ +' + vp + ' BN</span></div>';
+    } else {
+         html += '<div class="inline-flex items-center px-4 py-2 bg-slate-800 text-slate-300 rounded-xl mb-6 shadow-sm"><span class="font-bold text-sm">คุณเคยได้รับคะแนนจากวิดีโอนี้แล้ว</span></div>';
+    }
+        
+    html += '<p class="text-slate-300 mb-8 text-sm sm:text-lg">คุณทำได้ยอดเยี่ยมมาก</p>' +
+        '<div class="flex flex-col sm:flex-row gap-3 sm:gap-4 w-full max-w-sm mx-auto justify-center">';
+        
+    if (section.hasQuiz) {
+        html += '<button onclick="startQuiz()" class="w-full px-6 py-3 sm:py-4 bg-[#31c1d7] text-white font-bold rounded-xl sm:rounded-2xl hover:bg-[#1eb0c6] transition-all shadow-lg shadow-[#31c1d7]/30 text-base sm:text-lg">เริ่มทำแบบทดสอบ</button>';
+    } else {
+        if (currentSectionIndex < currentLesson.sections.length - 1) {
+            html += '<button onclick="playSection(\'' + currentLesson.LessonID + '\', ' + (currentSectionIndex + 1) + ')" class="w-full px-6 py-3 sm:py-4 bg-[#31c1d7] text-white font-bold rounded-xl sm:rounded-2xl hover:bg-[#1eb0c6] transition-all shadow-lg text-base sm:text-lg">เรียนบทถัดไป</button>';
+        } else {
+            html += '<button onclick="showView(\'lessonList\')" class="w-full px-6 py-3 sm:py-4 bg-[#31c1d7] text-white font-bold rounded-xl sm:rounded-2xl hover:bg-[#1eb0c6] transition-all shadow-lg text-base sm:text-lg">กลับหน้าหลัก</button>';
+        }
+    }
+    
+    html += '<button onclick="document.getElementById(\'video-ended-message\').classList.add(\'hidden\'); document.getElementById(\'video-ended-message\').classList.remove(\'flex\'); player.seekTo(0); player.playVideo();" class="w-full px-6 py-3 sm:py-4 bg-white/10 text-white font-bold rounded-xl sm:rounded-2xl hover:bg-white/20 transition-all text-base sm:text-lg border border-white/10">ดูซ้ำอีกครั้ง</button></div>';
+    
+    msgBox.innerHTML = html;
+    msgBox.classList.remove('hidden');
+    msgBox.classList.add('flex');
+}
+
+/* ==========================================
+   8. ระบบแบบทดสอบ (Quiz)
+========================================== */
+function startQuiz() {
+    const section = currentLesson.sections[currentSectionIndex];
+    views.quiz.innerHTML = '<div class="text-center py-20"><svg class="animate-spin h-10 w-10 text-[#31c1d7] mx-auto mb-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><p class="text-slate-500 font-bold">กำลังโหลดข้อสอบ...</p></div>';
+    showView('quiz');
+    
+    google.script.run
+        .withSuccessHandler(function(questions) {
+            quizQuestions = questions;
+            quizAnswers = new Array(questions.length).fill(null);
+            renderQuiz();
+        })
+        .getQuiz(section.SectionID);
+}
+
+function renderQuiz() {
+    if (!quizQuestions || quizQuestions.length === 0) {
+        views.quiz.innerHTML = '<div class="bg-white p-12 rounded-[2rem] shadow-xl text-center max-w-2xl mx-auto"><p class="text-slate-500 mb-6 font-medium text-lg">ไม่พบข้อสอบสำหรับบทเรียนนี้</p><button onclick="showView(\'lessonList\')" class="px-6 py-3 bg-[#31c1d7] text-white font-bold rounded-xl hover:bg-[#1eb0c6]">กลับหน้าหลัก</button></div>';
+        return;
+    }
+
+    let html = '<div class="max-w-3xl mx-auto bg-white rounded-[2rem] shadow-xl overflow-hidden border border-slate-100">' +
+        '<div class="bg-[#31c1d7] px-8 py-6 text-white">' +
+        '<h2 class="text-2xl font-black mb-1">แบบทดสอบ</h2><p class="opacity-90 font-medium">ทดสอบความเข้าใจจากวิดีโอ</p></div>' +
+        '<div class="p-8 sm:p-10 space-y-10">';
+
+    quizQuestions.forEach((q, idx) => {
+        html += '<div class="quiz-item">' +
+            '<h3 class="text-[17px] font-bold text-slate-800 mb-5 leading-relaxed"><span class="text-[#31c1d7] mr-2">' + (idx + 1) + '.</span>' + q.question + '</h3>';
+        
+        if (q.options && q.options.length > 0) {
+            html += '<div class="space-y-3">';
+            q.options.forEach(opt => {
+                const isSelected = quizAnswers[idx] === opt;
+                const btnClass = isSelected ? 'border-[#31c1d7] bg-[#31c1d7]/5 text-[#31c1d7] shadow-sm' : 'text-slate-600 hover:border-slate-300';
+                html += '<button onclick="selectOption(' + idx + ', \'' + opt.replace(/'/g, "\\'") + '\')" class="w-full text-left px-6 py-4 rounded-xl border-2 ' + btnClass + ' font-medium transition-all text-[15px]">' + opt + '</button>';
+            });
+            html += '</div>';
+        } else {
+            const currentAns = quizAnswers[idx] || '';
+            html += '<input type="text" id="subjective-ans-' + idx + '" onchange="selectOption(' + idx + ', this.value)" value="' + currentAns + '" placeholder="พิมพ์คำตอบของคุณที่นี่..." class="w-full px-6 py-4 rounded-xl border-2 border-slate-200 focus:border-[#31c1d7] outline-none transition-colors font-medium text-[15px] text-slate-700">';
+        }
+        
+        html += '</div>';
+    });
+
+    html += '</div><div class="px-8 py-6 bg-slate-50 border-t border-slate-100 flex justify-between items-center">' +
+        '<button onclick="playSection(\'' + currentLesson.LessonID + '\', ' + currentSectionIndex + ')" class="text-slate-500 font-bold hover:text-slate-800 transition-colors">กลับไปดูวิดีโอ</button>' +
+        '<button onclick="submitQuiz()" class="px-8 py-3.5 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-900 transition-all shadow-md">ส่งคำตอบ</button>' +
+        '</div></div>';
+    
+    views.quiz.innerHTML = html;
+}
+
+function selectOption(qIndex, answerValue) {
+    quizAnswers[qIndex] = answerValue.trim();
+    if (quizQuestions[qIndex].options && quizQuestions[qIndex].options.length > 0) {
+        renderQuiz(); 
+    }
+}
+
+// -------------------------------------------------------------
+// อัปเดต: การส่งข้อสอบ และอัปเดตโบนัส Rank ทันทีแบบสมบูรณ์
+// -------------------------------------------------------------
+function submitQuiz() {
+    if (quizAnswers.some(a => a === null || a === '')) {
+        showToast('กรุณาตอบคำถามให้ครบทุกข้อ', 'error');
+        return;
+    }
+
+    let score = 0;
+    const total = quizQuestions.length;
+
+    quizQuestions.forEach((q, idx) => {
+        const userAns = quizAnswers[idx].toLowerCase();
+        const correctAns = q.answer.toLowerCase();
+        if (userAns === correctAns || userAns.includes(correctAns)) {
+            score++;
+        }
+    });
+
+    const section = currentLesson.sections[currentSectionIndex];
+    const sectionId = section.SectionID;
+    const scoreData = { sectionId: sectionId, score: score, totalQuestions: total };
+    
+    // เช็คว่าพนักงานเคยสอบผ่านโบนัสมาแล้วหรือยัง
+    const alreadyPassed = section.quizScore && (section.quizScore.Score / section.quizScore.TotalQuestions) >= 0.5;
+
+    views.quiz.innerHTML = '<div class="text-center py-20"><svg class="animate-spin h-10 w-10 text-[#31c1d7] mx-auto mb-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><p class="text-slate-500 font-bold">กำลังประมวลผล...</p></div>';
+
+    google.script.run
+        .withSuccessHandler(function(response) {
+            if (response.status === 'success') {
+                if (response.passed) {
+                    if (!userInfo.progress.includes(sectionId)) {
+                        userInfo.progress.push(sectionId);
+                    }
+                    
+                    // แทรกคะแนนลงใน Local
+                    section.quizScore = { Score: score, TotalQuestions: total };
+                    
+                    // [อัปเดตใหม่] ถ้าเป็นการสอบผ่าน "ครั้งแรก" ให้บวกคะแนนโบนัสเข้า Navbar ทันที
+                    if (!alreadyPassed) {
+                        let qp = parseInt(section.QuizPoints);
+                        if (isNaN(qp)) qp = 50;
+                        if (typeof window.updateNavbarRank === 'function') window.updateNavbarRank(null, qp);
+                    }
+                }
+                // ส่งสถานะ alreadyPassed ไปด้วยเพื่อไม่ให้โชว์ว่าได้คะแนนเบิ้ล
+                showQuizResult(score, total, response.passed, !alreadyPassed);
+            }
+        })
+        .saveQuizScore(scoreData);
+}
+
+function showQuizResult(score, total, passed, isNewPass) {
+    const percent = Math.round((score / total) * 100);
+    const section = currentLesson.sections[currentSectionIndex];
+    let qp = parseInt(section.QuizPoints);
+    if (isNaN(qp)) qp = 50;
+    
+    let icon, title, desc, btnClass, btnText;
+
+    if (passed) {
+        icon = '<div class="w-24 h-24 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner"><svg class="w-12 h-12 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg></div>';
+        title = '<h2 class="text-3xl font-black text-slate-800 mb-2">สอบผ่าน! เยี่ยมมาก</h2>';
+        
+        // แยกกล่องโชว์ระหว่างคนที่สอบผ่านครั้งแรก กับ คนที่กลับมาสอบเล่นซ้ำ
+        if (isNewPass) {
+            desc = '<div class="inline-flex items-center px-4 py-2 bg-violet-50 text-violet-600 border border-violet-200 rounded-xl mb-4 shadow-sm"><span class="text-xl mr-2">🎁</span><span class="font-bold">ได้รับโบนัสข้อสอบ +' + qp + ' BN</span></div>' +
+                   '<p class="text-slate-500 text-lg">คุณทำคะแนนได้ดีมาก ความรู้แน่นเปรี๊ยะ</p>';
+        } else {
+            desc = '<div class="inline-flex items-center px-4 py-2 bg-slate-800 text-slate-300 rounded-xl mb-4 shadow-sm"><span class="font-bold text-sm">คุณเคยรับโบนัสจากแบบทดสอบนี้ไปแล้ว</span></div>' +
+                   '<p class="text-slate-500 text-lg">เก่งมากที่กลับมาทบทวนความรู้</p>';
+        }
+        
+        btnClass = 'bg-[#31c1d7] hover:bg-[#1eb0c6] shadow-lg shadow-[#31c1d7]/30';
+        btnText = 'กลับหน้าหลัก';
+    } else {
+        icon = '<div class="w-24 h-24 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner"><svg class="w-12 h-12 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"></path></svg></div>';
+        title = '<h2 class="text-3xl font-black text-slate-800 mb-2">เกือบผ่านแล้ว!</h2>';
+        desc = '<p class="text-slate-500 text-lg">ทบทวนเนื้อหาอีกนิด แล้วลองใหม่นะ</p>';
+        btnClass = 'bg-slate-800 hover:bg-slate-900 shadow-lg';
+        btnText = 'ทบทวนวิดีโอ & สอบใหม่';
+    }
+
+    let html = '<div class="max-w-lg mx-auto bg-white rounded-[2rem] shadow-xl p-10 text-center border border-slate-100 animate-fade-slide-up">' +
+        icon + title + desc +
+        '<div class="my-8 p-6 bg-slate-50 rounded-2xl border border-slate-100">' +
+        '<div class="text-5xl font-black ' + (passed ? 'text-emerald-500' : 'text-rose-500') + ' mb-2">' + percent + '%</div>' +
+        '<div class="text-sm font-bold text-slate-400 uppercase tracking-widest">คะแนน ' + score + ' / ' + total + '</div>' +
+        '</div>';
+
+    if (passed) {
+        html += '<button onclick="showView(\'lessonList\')" class="w-full px-6 py-4 ' + btnClass + ' text-white font-bold rounded-xl transition-all text-lg">' + btnText + '</button>';
+    } else {
+        html += '<button onclick="playSection(\'' + currentLesson.LessonID + '\', ' + currentSectionIndex + ')" class="w-full px-6 py-4 ' + btnClass + ' text-white font-bold rounded-xl transition-all text-lg">' + btnText + '</button>';
+    }
+    
+    html += '</div>';
+    views.quiz.innerHTML = html;
+}
+</script>
