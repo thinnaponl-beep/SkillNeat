@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;700&display=swap" rel="stylesheet">
+  <?!= include('Global_CSS'); ?>
+</head>
+<body class="bg-gray-100">
+
+  <?!= navigationMenu ?>
+
+  <div class="p-8">
+      <h1 class="text-3xl font-bold mb-6">Super Admin - จัดการสิทธิ์ผู้ดูแล</h1>
+      <div class="bg-white p-6 rounded-lg shadow-md">
+        <div class="mb-6">
+          <h2 class="text-xl font-bold mb-4">เพิ่มหรืออัปเดตผู้ดูแล</h2>
+          <div class="flex flex-col sm:flex-row sm:space-x-2">
+            <input type="email" id="new-admin-email" placeholder="ใส่อีเมลของผู้ดูแล" class="flex-grow p-2 border rounded-lg mb-2 sm:mb-0">
+            <button id="add-admin-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg">เพิ่ม/อัปเดต</button>
+          </div>
+          <p class="text-xs text-gray-500 mt-1">หากอีเมลมีอยู่แล้วจะอัปเดตสิทธิ์ หากไม่มีจะเพิ่มใหม่</p>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left min-w-max">
+            <thead>
+              <tr class="border-b">
+                <th class="p-3">Email</th>
+                <th class="p-3 text-center">แก้บทเรียน</th>
+                <th class="p-3 text-center">แก้ข้อสอบ</th>
+                <th class="p-3 text-center">Super Admin</th>
+              </tr>
+            </thead>
+            <tbody id="admins-table-body">
+              <tr><td colspan="4" class="text-center p-4">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+  </div>
+  <?!= include('SuperAdmin_JS'); ?>
+</body>
+</html>
