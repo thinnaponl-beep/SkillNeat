@@ -39,6 +39,11 @@ let maxTimeWatched = 0;
 let videoTrackerInterval = null;
 let isMiniPlayer = false;
 
+// ตัวแปรสำหรับระบบแคช Leaderboard และระบบค้นหา
+let cachedLeaderboardData = null;
+let isFetchingLeaderboard = false;
+let isLessonListInitialized = false;
+
 /* ==========================================
    2. การนำทางและควบคุมหน้า (Routing & Views)
 ========================================== */
@@ -132,56 +137,261 @@ function showToast(message, type = 'success') {
 }
 
 /* ==========================================
-   4. หน้าหลักการเรียนรู้ (Lesson List)
+   4. หน้าหลักการเรียนรู้ (Lesson List) & ระบบค้นหา
 ========================================== */
 function renderLessonList() {
     const container = views.lessonList;
     views.loading.classList.add('hidden');
     
-    const featured = studentData.featuredLessons || [];
-    const personalized = studentData.personalizedLessons || [];
+    // สร้างโครงสร้างหน้าหลัก (UI โครงเปล่า + แถบค้นหา) ในครั้งแรกเท่านั้น
+    if (!isLessonListInitialized) {
+        const allCategories = [...new Set(lessons.map(l => l.Category || 'ทั่วไป'))];
+        let catOptions = '<option value="">ทุกหมวดหมู่</option>';
+        allCategories.forEach(c => { catOptions += `<option value="${c}">${c}</option>`; });
+
+        container.innerHTML = `
+            <!-- JAVIS EDITED: แถบค้นหาและกรองแบบบาง (Slim Toolbar) ประหยัดพื้นที่ -->
+            <div class="mb-5 flex flex-col sm:flex-row items-center bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200 divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
+                <div class="relative flex-grow w-full">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    </div>
+                    <input type="text" id="lesson-search-input" oninput="handleSearchFilter()" placeholder="ค้นหาชื่อคอร์ส, ทักษะที่ต้องการเรียน..." class="w-full pl-9 pr-4 py-2 bg-transparent border-none outline-none text-sm focus:ring-0 transition-all font-medium text-slate-700">
+                </div>
+                <div class="w-full sm:w-56 flex-shrink-0 pt-1.5 sm:pt-0 sm:pl-1.5">
+                    <select id="lesson-category-filter" onchange="handleSearchFilter()" class="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100 cursor-pointer border-none rounded-xl text-sm focus:outline-none focus:ring-0 transition-colors font-bold text-slate-600">
+                        ${catOptions}
+                    </select>
+                </div>
+            </div>
+            
+            <!-- โครงสร้างกริดหลัก (ซ้ายเนื้อหา, ขวาแถบด้านข้าง) -->
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-8 items-start pt-1" id="main-layout-grid">
+                <div class="lg:col-span-3 space-y-8" id="left-column-content"></div>
+                <div class="lg:col-span-1 flex flex-col gap-6 sticky top-24" id="right-column-content"></div>
+            </div>
+        `;
+        isLessonListInitialized = true;
+    }
+
+    // ทำการวาดเนื้อหาลงในกล่องด้านซ้ายและขวา (พร้อมประยุกต์ใช้ตัวกรองถ้ามี)
+    handleSearchFilter();
+}
+
+function handleSearchFilter() {
+    const searchInput = document.getElementById('lesson-search-input');
+    const categoryFilter = document.getElementById('lesson-category-filter');
     
-    const notStartedFeatured = featured.filter(l => getLessonProgressStats(l).done < (l.sections ? l.sections.length : 0));
-    const notStartedPersonalized = personalized.filter(l => getLessonProgressStats(l).done < (l.sections ? l.sections.length : 0));
-    
+    const searchKw = searchInput ? searchInput.value.trim().toLowerCase() : '';
+    const filterCat = categoryFilter ? categoryFilter.value : '';
+
     const profile = userInfo.profile || {};
     const dept = profile.Department || 'ส่วนกลาง';
 
-    let html = '<div class="grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-8 items-start pt-2">' +
-        '<div class="lg:col-span-3 space-y-8">' +
-        '<div class="bg-slate-900 rounded-[2rem] py-10 px-8 sm:px-10 shadow-2xl flex items-center justify-between overflow-hidden relative">' +
-        '<div class="absolute top-0 right-0 -mr-20 -mt-20 w-[20rem] h-[20rem] rounded-full bg-[#31c1d7] blur-[90px] opacity-20"></div>' +
-        '<div class="absolute bottom-0 left-10 w-40 h-40 rounded-full bg-[#1eb0c6] blur-[60px] opacity-10"></div>' +
-        '<div class="relative z-10">' +
-        '<h2 class="text-2xl sm:text-3xl font-black text-white tracking-wide leading-tight mb-2">อัปสกิลอนาคต<br>ยกระดับศักยภาพด้วย <span class="text-[#31c1d7]">SkillNeat</span></h2>' +
-        '<p class="text-slate-400 font-medium text-sm sm:text-base max-w-sm">คัดสรรเนื้อหาคุณภาพ เพื่อการเติบโตอย่างก้าวกระโดด</p>' +
-        '</div>' +
-        '<div class="hidden sm:block relative z-10 opacity-80">' +
-        '<svg class="w-24 h-24 text-[#31c1d7]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>' +
-        '</div>' +
+    // ฟังก์ชันตรวจสอบเงื่อนไข
+    function isMatch(l) {
+        const matchKeyword = l.Title.toLowerCase().includes(searchKw) || (l.Description || '').toLowerCase().includes(searchKw);
+        const matchCategory = filterCat === '' || (l.Category || 'ทั่วไป') === filterCat;
+        return matchKeyword && matchCategory;
+    }
+
+    // ดึงข้อมูลและกรอง
+    const inProgressRaw = lessons.filter(l => {
+        const stats = getLessonProgressStats(l);
+        return stats.done > 0 && !stats.isCompleted;
+    });
+    const inProgress = inProgressRaw.filter(isMatch);
+
+    const featured = studentData.featuredLessons || [];
+    const personalized = studentData.personalizedLessons || [];
+    
+    const notStartedFeatured = featured.filter(l => getLessonProgressStats(l).done < (l.sections ? l.sections.length : 0)).filter(isMatch);
+    const notStartedPersonalized = personalized.filter(l => getLessonProgressStats(l).done < (l.sections ? l.sections.length : 0)).filter(isMatch);
+
+    // ==========================================
+    // สร้างเนื้อหา Column ฝั่งซ้าย
+    // ==========================================
+    let leftHtml = '';
+
+    // ซ่อนแบนเนอร์ถ้ายูสเซอร์กำลังพิมพ์ค้นหา (เพื่อประหยัดพื้นที่ให้เห็นผลลัพธ์)
+    if(searchKw === '' && filterCat === '') {
+        leftHtml += `<div class="bg-slate-900 rounded-[2rem] py-10 px-8 sm:px-10 shadow-2xl flex items-center justify-between overflow-hidden relative mb-8">
+            <div class="absolute top-0 right-0 -mr-20 -mt-20 w-[20rem] h-[20rem] rounded-full bg-[#31c1d7] blur-[90px] opacity-20"></div>
+            <div class="absolute bottom-0 left-10 w-40 h-40 rounded-full bg-[#1eb0c6] blur-[60px] opacity-10"></div>
+            <div class="relative z-10">
+                <h2 class="text-2xl sm:text-3xl font-black text-white tracking-wide leading-tight mb-2">อัปสกิลอนาคต<br>ยกระดับศักยภาพด้วย <span class="text-[#31c1d7]">SkillNeat</span></h2>
+                <p class="text-slate-400 font-medium text-sm sm:text-base max-w-sm">คัดสรรเนื้อหาคุณภาพ เพื่อการเติบโตอย่างก้าวกระโดด</p>
+            </div>
+            <div class="hidden sm:block relative z-10 opacity-80">
+                <svg class="w-24 h-24 text-[#31c1d7]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>
+            </div>
+        </div>`;
+    }
+
+    if (inProgress.length > 0) {
+        leftHtml += '<div class="mb-8">' +
+            '<div class="flex items-center gap-3.5 mb-5">' +
+                '<div class="w-12 h-12 rounded-2xl bg-amber-100 border border-amber-200 flex items-center justify-center shadow-inner flex-shrink-0">' +
+                    '<span class="text-2xl drop-shadow-sm">⏳</span>' +
+                '</div>' +
+                '<div>' +
+                    '<h3 class="text-xl sm:text-2xl font-black text-slate-800 leading-tight">เรียนค้างไว้ <span class="inline-block text-xs font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200 ml-2 align-middle shadow-sm">เรียนต่อเลย!</span></h3>' +
+                    '<p class="text-sm font-bold text-slate-500 mt-0.5">คอร์สที่คุณเริ่มเรียนไปแล้ว</p>' +
+                '</div>' +
+            '</div>' +
+            '<div class="flex overflow-x-auto space-x-4 pb-4 custom-scrollbar snap-x">' + 
+            inProgress.map(l => renderInProgressCard(l)).join('') + 
+            '</div></div>';
+    }
+
+    leftHtml += '<div>' +
+        '<div class="flex items-center gap-3.5 mb-5">' +
+            '<div class="w-12 h-12 rounded-2xl bg-[#31c1d7]/10 border border-[#31c1d7]/20 flex items-center justify-center shadow-inner flex-shrink-0">' +
+                '<span class="text-2xl drop-shadow-sm">📚</span>' +
+            '</div>' +
+            '<div>' +
+                '<h3 class="text-xl sm:text-2xl font-black text-slate-800 leading-tight">คอร์สเรียนน่าสนใจ</h3>' +
+                '<p class="text-sm font-bold text-slate-500 mt-0.5">เนื้อหาใหม่ที่คุณอาจชอบ</p>' +
+            '</div>' +
         '</div>' +
         '<div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">';
         
     if (notStartedFeatured.length > 0) { 
-        html += notStartedFeatured.map(l => renderModernCard(l)).join(''); 
+        leftHtml += notStartedFeatured.map(l => renderModernCard(l)).join(''); 
     } else { 
-        html += '<div class="col-span-full text-center p-10 bg-white rounded-[1.5rem] border border-slate-100"><p class="text-slate-400 font-medium">ไม่มีคอร์สใหม่ในหมวดหมู่นี้</p></div>'; 
+        leftHtml += `<div class="col-span-full text-center p-10 bg-white rounded-[1.5rem] border border-slate-100 shadow-sm"><p class="text-slate-400 font-medium">${(searchKw || filterCat) ? 'ไม่พบคอร์สที่ตรงกับการค้นหา' : 'ไม่มีคอร์สใหม่ในหมวดหมู่นี้'}</p></div>`; 
     }
-    
-    html += '</div></div>' +
-        '<div class="lg:col-span-1 sticky top-24">' +
-        '<div class="bg-white rounded-[2rem] p-6 sm:p-8 shadow-sm border border-slate-100">' +
-        '<div class="flex items-center space-x-3 mb-6"><div class="w-1.5 h-6 bg-[#31c1d7] rounded-full shadow-[0_0_10px_rgba(49,193,215,0.5)]"></div><h2 class="text-lg sm:text-xl font-extrabold text-slate-800">สำหรับแผนก ' + dept + '</h2></div>' +
-        '<div class="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">';
+    leftHtml += '</div></div>';
+
+    document.getElementById('left-column-content').innerHTML = leftHtml;
+
+    // ==========================================
+    // สร้างเนื้อหา Column ฝั่งขวา
+    // ==========================================
+    let rightHtml = '<div class="bg-white rounded-[2rem] p-6 sm:p-7 shadow-sm border border-slate-100">' +
+        '<div class="flex items-center space-x-3 mb-5"><div class="text-3xl drop-shadow-sm">🏆</div><h2 class="text-lg font-extrabold text-slate-800">Top 5 Leaderboard</h2></div>' +
+        '<div id="home-leaderboard-container" class="space-y-3 min-h-[150px] flex flex-col justify-center items-center">' +
+        '<svg class="animate-spin h-6 w-6 text-[#31c1d7]" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>' +
+        '<span class="text-xs text-slate-400 mt-2 font-medium">กำลังโหลดผู้นำ...</span>' +
+        '</div></div>';
+
+    rightHtml += '<div class="bg-white rounded-[2rem] p-6 sm:p-7 shadow-sm border border-slate-100">' +
+        '<div class="flex items-center space-x-3 mb-6"><div class="w-1.5 h-6 bg-[#31c1d7] rounded-full shadow-[0_0_10px_rgba(49,193,215,0.5)]"></div><h2 class="text-lg font-extrabold text-slate-800">สำหรับแผนก ' + dept + '</h2></div>' +
+        '<div class="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">';
         
     if (notStartedPersonalized.length > 0) { 
-        html += notStartedPersonalized.map(l => renderHorizontalCard(l)).join(''); 
+        rightHtml += notStartedPersonalized.map(l => renderHorizontalCard(l)).join(''); 
     } else { 
-        html += '<div class="text-center p-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200"><p class="text-slate-400 font-bold text-sm">คุณเรียนครบหมดแล้ว!</p></div>'; 
+        rightHtml += `<div class="text-center p-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200"><p class="text-slate-400 font-bold text-sm">${(searchKw || filterCat) ? 'ไม่พบคอร์สที่ค้นหา' : 'คุณเรียนครบหมดแล้ว!'}</p></div>`; 
     }
     
-    html += '</div></div></div></div>';
+    rightHtml += '</div></div>';
+
+    document.getElementById('right-column-content').innerHTML = rightHtml;
+
+    // เรียกโหลด Leaderboard ต่อทันที (ใช้ระบบแคช)
+    fetchHomeLeaderboard();
+}
+
+// ==========================================
+// ฟังก์ชัน: ดึงข้อมูลและสร้าง Leaderboard ย่อย (ปรับใช้ Cache)
+// ==========================================
+function fetchHomeLeaderboard() {
+    // ถ้าระบบมีข้อมูลใน Cache อยู่แล้ว ให้ดึงมาแสดงเลยทันที! ไม่ต้องรอเซิร์ฟเวอร์
+    if (cachedLeaderboardData !== null) {
+        renderHomeLeaderboard(cachedLeaderboardData);
+        return;
+    }
     
+    // ป้องกันการยิง Request ซ้ำซ้อนถ้าระบบกำลังโหลดอยู่
+    if (isFetchingLeaderboard) return;
+    isFetchingLeaderboard = true;
+
+    google.script.run
+        .withSuccessHandler(data => {
+            cachedLeaderboardData = data; // จำข้อมูลไว้ใช้ครั้งต่อไป
+            isFetchingLeaderboard = false;
+            renderHomeLeaderboard(data);
+        })
+        .withFailureHandler(err => {
+            isFetchingLeaderboard = false;
+            console.error('Failed to fetch leaderboard:', err);
+        })
+        .getPublicLeaderboard();
+}
+
+function renderHomeLeaderboard(leaderboardData) {
+    const container = document.getElementById('home-leaderboard-container');
+    if(!container) return;
+
+    const currentUserEmail = userInfo.email.toLowerCase();
+    let html = '';
+
+    if (!leaderboardData || leaderboardData.length === 0) {
+        container.className = "w-full text-center py-4";
+        container.innerHTML = '<span class="text-sm text-slate-400">ยังไม่มีผู้สะสมคะแนนในระบบ</span>';
+        return;
+    }
+
+    // สร้างลิสต์ 5 อันดับแรก
+    const top5 = leaderboardData.slice(0, 5);
+    top5.forEach((user, index) => {
+        const isMe = user.email === currentUserEmail;
+        let rankIcon = `<span class="text-slate-400 font-black text-sm">${index + 1}</span>`;
+        if(index === 0) rankIcon = '<span class="text-xl drop-shadow-sm" title="อันดับ 1">🥇</span>';
+        else if(index === 1) rankIcon = '<span class="text-xl drop-shadow-sm" title="อันดับ 2">🥈</span>';
+        else if(index === 2) rankIcon = '<span class="text-xl drop-shadow-sm" title="อันดับ 3">🥉</span>';
+
+        html += `
+        <div class="flex items-center justify-between p-2.5 rounded-xl ${isMe ? 'bg-gradient-to-r from-[#31c1d7]/10 to-[#1eb0c6]/5 border border-[#31c1d7]/30 ring-1 ring-[#31c1d7]/50' : 'hover:bg-slate-50 border border-transparent'} transition-all group">
+            <div class="flex items-center gap-3 overflow-hidden">
+                <div class="w-6 text-center flex justify-center">${rankIcon}</div>
+                <img src="${user.img}" class="w-9 h-9 rounded-full object-cover shadow-sm ring-2 ring-white group-hover:ring-[#31c1d7]/20 transition-all">
+                <div class="truncate">
+                    <p class="text-[13px] font-bold text-slate-800 truncate">${user.name} ${isMe ? '<span class="text-[9px] bg-[#31c1d7] text-white px-1.5 py-0.5 rounded shadow-sm ml-1">คุณ</span>' : ''}</p>
+                    <p class="text-[10px] text-slate-400 truncate">${user.dept}</p>
+                </div>
+            </div>
+            <div class="text-right flex-shrink-0 pl-2">
+                <p class="text-sm font-black text-[#31c1d7]">${new Intl.NumberFormat().format(user.totalBN)}</p>
+                <p class="text-[9px] text-slate-400 font-bold uppercase tracking-wider">BN</p>
+            </div>
+        </div>`;
+    });
+
+    // ตรวจสอบว่าผู้ใช้งานคนปัจจุบันติด Top 5 หรือไม่
+    const myRankIndex = leaderboardData.findIndex(u => u.email === currentUserEmail);
+    
+    // ถ้าไม่ติดอันดับ 1-5 แต่มีคะแนน ให้ต่อท้ายด้วยอันดับตัวเอง
+    if(myRankIndex > 4) { 
+        const myData = leaderboardData[myRankIndex];
+        html += `<div class="w-full h-px bg-slate-100 my-3 relative"><span class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white px-2 text-[10px] font-bold text-slate-300">อันดับของคุณ</span></div>`;
+        html += `
+        <div class="flex items-center justify-between p-2.5 rounded-xl bg-gradient-to-r from-[#31c1d7]/10 to-[#1eb0c6]/5 border border-[#31c1d7]/30 ring-1 ring-[#31c1d7]/50 transition-all">
+            <div class="flex items-center gap-3 overflow-hidden">
+                <div class="w-6 text-center text-xs font-black text-slate-500">${myRankIndex + 1}</div>
+                <img src="${myData.img}" class="w-9 h-9 rounded-full object-cover shadow-sm ring-2 ring-white">
+                <div class="truncate">
+                    <p class="text-[13px] font-bold text-[#1eb0c6] truncate">${myData.name} <span class="text-[9px] bg-[#31c1d7] text-white px-1.5 py-0.5 rounded shadow-sm ml-1">คุณ</span></p>
+                    <p class="text-[10px] text-[#31c1d7] truncate">${myData.dept}</p>
+                </div>
+            </div>
+            <div class="text-right flex-shrink-0 pl-2">
+                <p class="text-sm font-black text-[#31c1d7]">${new Intl.NumberFormat().format(myData.totalBN)}</p>
+                <p class="text-[9px] text-slate-400 font-bold uppercase tracking-wider">BN</p>
+            </div>
+        </div>`;
+    } 
+    // ถ้าผู้ใช้ยังไม่มีคะแนนเลย
+    else if (myRankIndex === -1) {
+        html += `<div class="w-full h-px bg-slate-100 my-3"></div>`;
+        html += `
+        <div class="flex items-center justify-center p-3 rounded-xl bg-slate-50 border border-dashed border-slate-200 transition-all opacity-80">
+            <span class="text-xs font-bold text-slate-400">คุณยังไม่มีคะแนน เริ่มเรียนเลย!</span>
+        </div>`;
+    }
+
+    container.className = "space-y-1.5 w-full animate-fade-slide-up"; 
     container.innerHTML = html;
 }
 
@@ -198,21 +408,48 @@ function renderMyCourses() {
         '<p class="text-slate-500 mt-2 text-lg">ติดตามความคืบหน้าและทบทวนบทเรียนของคุณ</p>' +
         '</header>';
 
-    html += '<h2 class="text-xl font-bold text-slate-800 mb-5 flex items-center"><span class="text-[#31c1d7] mr-2">⏳</span> กำลังเรียน</h2>';
+    html += '<div class="flex items-center gap-3.5 mb-6">' +
+        '<div class="w-12 h-12 rounded-2xl bg-amber-100 border border-amber-200 flex items-center justify-center shadow-inner flex-shrink-0">' +
+            '<span class="text-2xl drop-shadow-sm">⏳</span>' +
+        '</div>' +
+        '<div><h2 class="text-2xl font-black text-slate-800 leading-none">กำลังเรียน</h2></div>' +
+    '</div>';
+
     if (inProgress.length > 0) {
         html += '<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 mb-12">' + inProgress.map(l => renderModernCard(l)).join('') + '</div>';
     } else {
-        html += '<div class="text-center p-12 bg-white rounded-3xl border border-slate-100 mb-12"><p class="text-slate-400 font-medium">ยังไม่มีคอร์สที่กำลังเรียน</p></div>';
+        html += '<div class="text-center p-12 bg-white rounded-3xl border border-slate-100 mb-12 shadow-sm"><p class="text-slate-400 font-medium">ยังไม่มีคอร์สที่กำลังเรียน</p></div>';
     }
 
-    html += '<h2 class="text-xl font-bold text-slate-800 mb-5 flex items-center"><span class="text-emerald-500 mr-2">✅</span> เรียนจบแล้ว</h2>';
+    html += '<div class="flex items-center gap-3.5 mb-6 mt-8">' +
+        '<div class="w-12 h-12 rounded-2xl bg-emerald-100 border border-emerald-200 flex items-center justify-center shadow-inner flex-shrink-0">' +
+            '<span class="text-2xl drop-shadow-sm">✅</span>' +
+        '</div>' +
+        '<div><h2 class="text-2xl font-black text-slate-800 leading-none">เรียนจบแล้ว</h2></div>' +
+    '</div>';
+
     if (completed.length > 0) {
         html += '<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 mb-12">' + completed.map(l => renderModernCard(l)).join('') + '</div>';
     } else {
-        html += '<div class="text-center p-12 bg-white rounded-3xl border border-slate-100 mb-12"><p class="text-slate-400 font-medium">ยังไม่มีคอร์สที่เรียนจบ</p></div>';
+        html += '<div class="text-center p-12 bg-white rounded-3xl border border-slate-100 mb-12 shadow-sm"><p class="text-slate-400 font-medium">ยังไม่มีคอร์สที่เรียนจบ</p></div>';
     }
 
     container.innerHTML = html;
+}
+
+// สร้างการ์ดแนวนอนสำหรับ "เรียนค้างไว้"
+function renderInProgressCard(lesson) {
+    const stats = getLessonProgressStats(lesson);
+    const thumbnailUrl = getThumbnailUrl(lesson);
+
+    return '<div class="snap-start flex-shrink-0 w-64 sm:w-72 flex items-center p-2.5 bg-white border border-[#31c1d7]/30 rounded-2xl cursor-pointer hover:border-[#31c1d7] hover:shadow-md transition-all group" onclick="showLessonDetails(\'' + lesson.LessonID + '\')">' +
+        '<div class="w-20 h-16 sm:w-24 sm:h-16 rounded-[10px] overflow-hidden flex-shrink-0 relative bg-slate-100">' +
+        '<img src="' + thumbnailUrl + '" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">' +
+        '</div>' +
+        '<div class="ml-3 sm:ml-4 flex flex-col justify-center flex-grow overflow-hidden">' +
+        '<h4 class="text-[13px] sm:text-sm font-bold text-[#1eb0c6] group-hover:text-[#31c1d7] line-clamp-2 leading-snug transition-colors">' + lesson.Title + '</h4>' +
+        '<p class="text-[10px] sm:text-[11px] font-bold text-slate-500 mt-1">เรียนไปแล้ว ' + stats.percent + '%</p>' +
+        '</div></div>';
 }
 
 function renderModernCard(lesson) {
@@ -282,22 +519,42 @@ function showLessonDetails(lessonId) {
 
     html += '<div class="space-y-4">';
     lesson.sections.forEach((sec, index) => {
-        // เช็คการจบวิดีโอแบบรัดกุม String Comparison
+        // เช็คการจบวิดีโอ
         const isDone = userInfo.progress.some(id => String(id).trim() === String(sec.SectionID).trim());
         const icon = isDone 
             ? '<div class="w-8 h-8 rounded-full bg-emerald-100 text-emerald-500 flex items-center justify-center flex-shrink-0 shadow-sm"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg></div>'
             : '<div class="w-8 h-8 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center flex-shrink-0 font-bold text-sm shadow-sm">' + (index + 1) + '</div>';
         
         let subText = sec.hasQuiz ? '<span class="text-violet-500 bg-violet-50 px-2 py-0.5 rounded text-[10px] uppercase tracking-wider ml-3 border border-violet-100">มีแบบทดสอบ</span>' : '';
+        let passedQuiz = false;
+        
         if (sec.quizScore) {
-            const passed = (sec.quizScore.Score / sec.quizScore.TotalQuestions) >= 0.5;
-            subText += passed ? '<span class="text-emerald-500 text-xs ml-3">สอบผ่านแล้ว</span>' : '<span class="text-rose-500 text-xs ml-3">สอบไม่ผ่าน</span>';
+            passedQuiz = (sec.quizScore.Score / sec.quizScore.TotalQuestions) >= 0.5;
+            subText += passedQuiz ? '<span class="text-emerald-500 text-xs ml-3">สอบผ่านแล้ว</span>' : '<span class="text-rose-500 text-xs ml-3">สอบไม่ผ่าน</span>';
         }
 
-        html += '<div class="flex items-center justify-between p-4 bg-white border ' + (isDone ? 'border-emerald-100 bg-emerald-50/30' : 'border-slate-100 hover:border-[#31c1d7]/40') + ' rounded-2xl transition-all group">' +
-            '<div class="flex items-center space-x-4"><div class="flex-shrink-0">' + icon + '</div>' +
+        // ระบบปุ่มใหม่: วิดีโอจบแล้ว มีปุ่ม "สอบเลย" แยกออกมา
+        let actionBtn = '';
+        if (isDone) {
+            if (sec.hasQuiz && !passedQuiz) {
+                actionBtn = `<div class="flex items-center gap-2 mt-2 sm:mt-0">
+                    <button onclick="playSection('${lesson.LessonID}', ${index})" class="px-4 py-2 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl font-bold text-xs transition-all" title="ดูวิดีโอซ้ำ">เรียนซ้ำ</button>
+                    <button onclick="startQuizDirectly('${lesson.LessonID}', ${index})" class="px-4 py-2 bg-violet-500 text-white hover:bg-violet-600 shadow-sm shadow-violet-500/30 rounded-xl font-bold text-xs transition-all flex items-center gap-1">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+                        สอบเลย
+                    </button>
+                </div>`;
+            } else {
+                actionBtn = `<button onclick="playSection('${lesson.LessonID}', ${index})" class="px-5 py-2 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl font-bold text-sm transition-all">เรียนซ้ำ</button>`;
+            }
+        } else {
+            actionBtn = `<button onclick="playSection('${lesson.LessonID}', ${index})" class="px-5 py-2 bg-[#31c1d7] text-white hover:bg-[#1eb0c6] shadow-sm shadow-[#31c1d7]/20 rounded-xl font-bold text-sm transition-all">เริ่มเรียน</button>`;
+        }
+
+        html += '<div class="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-white border ' + (isDone ? 'border-emerald-100 bg-emerald-50/30' : 'border-slate-100 hover:border-[#31c1d7]/40') + ' rounded-2xl transition-all group">' +
+            '<div class="flex items-center space-x-4 mb-2 sm:mb-0"><div class="flex-shrink-0">' + icon + '</div>' +
             '<div><h4 class="text-[15px] font-bold text-slate-800 group-hover:text-[#31c1d7] transition-colors">' + sec.Title + subText + '</h4></div></div>' +
-            '<button onclick="playSection(\'' + lesson.LessonID + '\', ' + index + ')" class="px-5 py-2 ' + (isDone ? 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50' : 'bg-[#31c1d7] text-white hover:bg-[#1eb0c6] shadow-sm shadow-[#31c1d7]/20') + ' rounded-xl font-bold text-sm transition-all">' + (isDone ? 'เรียนซ้ำ' : 'เริ่มเรียน') + '</button>' +
+            actionBtn +
             '</div>';
     });
     html += '</div>';
@@ -499,9 +756,6 @@ function saveVideoProgress() {
     }
 }
 
-// -------------------------------------------------------------
-// อัปเดต: ให้คะแนน BN ทันทีเมื่อวิดีโอจบ พร้อม Pop-up แจ้งเตือน
-// -------------------------------------------------------------
 function showVideoEndedMessage() {
     const msgBox = document.getElementById('video-ended-message');
     const section = currentLesson.sections[currentSectionIndex];
@@ -525,6 +779,9 @@ function showVideoEndedMessage() {
         
         google.script.run.withSuccessHandler(() => {
             showToast('บันทึกความคืบหน้าเรียบร้อยแล้ว');
+            // JAVIS UPDATE: เคลียร์แคชและรีเฟรช Leaderboard ทันทีที่มีการได้คะแนน
+            cachedLeaderboardData = null;
+            fetchHomeLeaderboard();
         }).recordProgress(sectionIdSafe);
         
         // สั่งให้ Navbar บวกคะแนนให้พนักงานทันที (บังคับส่งค่าตัวเลขเท่านั้น)
@@ -566,6 +823,15 @@ function showVideoEndedMessage() {
 /* ==========================================
    8. ระบบแบบทดสอบ (Quiz)
 ========================================== */
+function startQuizDirectly(lessonId, sectionIndex) {
+    // JAVIS ADDED: ฟังก์ชันกดเข้าทำข้อสอบได้ทันทีสำหรับคนที่ดูวิดีโอจบแล้ว
+    closeLessonDetailsModal();
+    if (isMiniPlayer) closeVideo();
+    currentLesson = lessons.find(l => l.LessonID === lessonId);
+    currentSectionIndex = sectionIndex;
+    startQuiz();
+}
+
 function startQuiz() {
     const section = currentLesson.sections[currentSectionIndex];
     views.quiz.innerHTML = '<div class="text-center py-20"><svg class="animate-spin h-10 w-10 text-[#31c1d7] mx-auto mb-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><p class="text-slate-500 font-bold">กำลังโหลดข้อสอบ...</p></div>';
@@ -668,6 +934,10 @@ function submitQuiz() {
                         
                         // อัปเดต state ตัวแปรคะแนน Local ป้องกันข้อมูลหน่วงจากการดึงฝั่งเซิร์ฟเวอร์
                         userInfo.totalBN = (parseInt(userInfo.totalBN, 10) || 0) + qp;
+                        
+                        // JAVIS UPDATE: เคลียร์แคชและอัปเดต Leaderboard ทันทีหลังสอบผ่าน
+                        cachedLeaderboardData = null;
+                        fetchHomeLeaderboard();
                         
                         if (typeof window.updateNavbarRank === 'function') {
                             window.updateNavbarRank(null, qp);
