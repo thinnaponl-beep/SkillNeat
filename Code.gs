@@ -238,6 +238,74 @@ function getStudentData(userEmail) {
   };
 }
 
+// =======================================================
+// [JAVIS ADDED] ฟังก์ชันใหม่สำหรับดึงข้อมูล Leaderboard แบบเบาๆ
+// =======================================================
+function getPublicLeaderboard() {
+  const usersProgress = getSheetData(PROGRESS_SHEET_NAME);
+  const scores = getSheetData(QUIZ_SCORES_SHEET_NAME);
+  const sections = getSheetData(SECTIONS_SHEET_NAME);
+  const profiles = getSheetData(USER_PROFILES_SHEET_NAME);
+
+  const sectionMap = {};
+  sections.forEach(s => {
+     sectionMap[s.SectionID] = {
+         vp: parseInt(s.VideoPoints) || 10,
+         qp: parseInt(s.QuizPoints) || 50
+     };
+  });
+
+  const studentMap = {};
+
+  profiles.forEach(p => {
+      const email = String(p.Email).trim().toLowerCase();
+      let defaultImg = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(p.Nickname || p.FullName || email) + '&background=31c1d7&color=fff';
+      studentMap[email] = {
+          email: email,
+          name: p.Nickname || p.FullName || email.split('@')[0],
+          dept: p.Department || 'General',
+          img: p.ProfileImage || defaultImg,
+          completedSections: [],
+          scores: {},
+          totalBN: 0
+      };
+  });
+
+  usersProgress.forEach(p => {
+      const email = String(p.Email).trim().toLowerCase();
+      if(!studentMap[email]) { 
+          studentMap[email] = { email: email, name: email.split('@')[0], dept: 'General', img: 'https://ui-avatars.com/api/?name='+email+'&background=31c1d7&color=fff', completedSections: [], scores: {}, totalBN: 0 };
+      }
+      if (sectionMap[p.SectionID] && !studentMap[email].completedSections.includes(p.SectionID)) {
+          studentMap[email].completedSections.push(p.SectionID);
+          studentMap[email].totalBN += sectionMap[p.SectionID].vp; 
+      }
+  });
+
+  scores.forEach(s => {
+      const email = String(s.Email).trim().toLowerCase();
+      if(!studentMap[email]) {
+          studentMap[email] = { email: email, name: email.split('@')[0], dept: 'General', img: 'https://ui-avatars.com/api/?name='+email+'&background=31c1d7&color=fff', completedSections: [], scores: {}, totalBN: 0 };
+      }
+      if (sectionMap[s.SectionID]) {
+          const percent = s.TotalQuestions > 0 ? (s.Score / s.TotalQuestions) : 0;
+          if (percent >= 0.5) { 
+             if (!studentMap[email].scores[s.SectionID]) { 
+                 studentMap[email].scores[s.SectionID] = percent;
+                 studentMap[email].totalBN += sectionMap[s.SectionID].qp; 
+             }
+          }
+      }
+  });
+
+  // กรองเอาเฉพาะคนที่มีคะแนนมากกว่า 0
+  const activeStudents = Object.values(studentMap).filter(std => std.totalBN > 0);
+  
+  // เรียงลำดับคะแนนจากมากไปน้อย
+  return activeStudents.sort((a,b) => b.totalBN - a.totalBN);
+}
+// =======================================================
+
 function saveQuizScore(scoreData) {
     const userEmail = Session.getActiveUser().getEmail();
     if (!userEmail) return { status: 'error', message: 'User not logged in.' };
