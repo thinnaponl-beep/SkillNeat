@@ -20,7 +20,6 @@ function doGet(e){
   const permissions = getCurrentUserPermissions(userEmail);
   const page = e.parameter.page;
   
-  // ดึงข้อมูล Profile ของผู้ใช้ (แปลงอีเมลเป็นตัวเล็กทั้งหมดตอนเทียบ)
   let userProfile = { Email: userEmail, FullName: '', Nickname: '', Department: 'General', Position: '', ProfileImage: '' };
   const profiles = getSheetData(USER_PROFILES_SHEET_NAME);
   if (profiles && profiles.length > 0) {
@@ -52,7 +51,6 @@ function doGet(e){
     }
   }
 
-  // บังคับให้หน้าแรกเป็น Student_View เสมอ
   templateData.studentData = getStudentData(userEmail);
   return renderPage('Student_View','E-Learning Platform',templateData);
 }
@@ -151,7 +149,6 @@ function getStudentData(userEmail) {
   const lessons = getSheetData(LESSONS_SHEET_NAME).filter(l => l.IsActive === true);
   const sections = getSheetData(SECTIONS_SHEET_NAME);
   
-  // แก้ไข: กรองอีเมลโดยป้องกันปัญหาตัวพิมพ์เล็ก/ใหญ่
   const progress = getSheetData(PROGRESS_SHEET_NAME)
       .filter(p => String(p.Email).trim().toLowerCase() === userEmail)
       .map(p => p.SectionID);
@@ -171,7 +168,6 @@ function getStudentData(userEmail) {
      if (found) userProfile = found;
   }
 
-  // --- ระบบคำนวณคะแนน BN รวม ---
   let totalBN = 0;
 
   lessons.forEach(lesson => {
@@ -186,12 +182,10 @@ function getStudentData(userEmail) {
                                   .sort((a, b) => new Date(b.Timestamp) - new Date(a.Timestamp))[0];
         section.quizScore = latestScore || null;
 
-        // บวกคะแนนถ้าวิดีโอเรียนจบแล้ว
         if (progress.includes(section.SectionID)) {
             let vp = parseInt(section.VideoPoints);
             totalBN += isNaN(vp) ? 10 : vp;
         }
-        // บวกโบนัสถ้าทำข้อสอบผ่าน (ได้ 50% ขึ้นไป)
         if (section.quizScore && (section.quizScore.Score / section.quizScore.TotalQuestions) >= 0.5) {
             let qp = parseInt(section.QuizPoints);
             totalBN += isNaN(qp) ? 50 : qp;
@@ -237,7 +231,7 @@ function getStudentData(userEmail) {
   const featuredLessons = accessibleLessons.filter(lesson => !personalizedIds.includes(lesson.LessonID));
 
   return {
-    userInfo: { email: userEmail, progress: progress, profile: userProfile, totalBN: totalBN }, // ส่ง totalBN กลับไปหน้าเว็บ
+    userInfo: { email: userEmail, progress: progress, profile: userProfile, totalBN: totalBN },
     lessons: lessons,
     featuredLessons: featuredLessons,
     personalizedLessons: personalizedLessons
@@ -379,7 +373,6 @@ function getAdminData() {
         });
     });
 
-    // --- ดึงข้อมูลจากหน้า Settings มาส่งให้หน้าจอ ---
     let settings = { categories: [], departments: [], positions: [] };
     try {
         const settingsData = getSheetData('Settings');
@@ -690,6 +683,9 @@ function updateAdminPermissions(email, newPermissions) {
   }
 }
 
+// ==============================================================
+// 📊 ฟังก์ชันใหม่: ดึงสถิติ Dashboard และ Leaderboard ฉบับสมบูรณ์
+// ==============================================================
 function getDashboardStats() {
   const permissions = getCurrentUserPermissions(Session.getActiveUser().getEmail());
   if (!permissions.canEditLessons && !permissions.canEditQuizzes && !permissions.isSuperAdmin) return { error: 'Permission Denied' };
@@ -697,47 +693,116 @@ function getDashboardStats() {
   const usersProgress = getSheetData(PROGRESS_SHEET_NAME);
   const scores = getSheetData(QUIZ_SCORES_SHEET_NAME);
   const sections = getSheetData(SECTIONS_SHEET_NAME);
-  const totalSections = sections.length;
+  const profiles = getSheetData(USER_PROFILES_SHEET_NAME);
+  const lessons = getSheetData(LESSONS_SHEET_NAME).filter(l => l.IsActive);
+
+  // กรองเฉพาะ Section ที่อยู่ในคอร์สที่เปิดใช้งานอยู่
+  const activeLessonIds = lessons.map(l => l.LessonID);
+  const activeSections = sections.filter(s => activeLessonIds.includes(s.LessonID));
+  const totalSections = activeSections.length;
+
+  // ทำแผนที่เก็บคะแนนของแต่ละ Section ไว้เลย จะได้ดึงไปบวกง่ายๆ
+  const sectionMap = {};
+  activeSections.forEach(s => {
+     sectionMap[s.SectionID] = {
+         vp: parseInt(s.VideoPoints) || 10,
+         qp: parseInt(s.QuizPoints) || 50
+     };
+  });
 
   const studentMap = {};
 
+  // 1. นำรายชื่อจาก UserProfiles มาสร้างเป็นตารางข้อมูลตั้งต้น
+  profiles.forEach(p => {
+      const email = String(p.Email).trim().toLowerCase();
+      studentMap[email] = {
+          email: email,
+          fullName: p.FullName || email,
+          nickname: p.Nickname || '-',
+          department: p.Department || 'General',
+          position: p.Position || '-',
+          profileImage: p.ProfileImage || '',
+          completedSections: [],
+          scores: {},
+          totalBN: 0,
+          lastActive: null
+      };
+  });
+
+  // 2. นำประวัติการดูวิดีโอมาใส่และบวกคะแนน VideoPoints
   usersProgress.forEach(p => {
-    const email = String(p.Email).trim().toLowerCase();
-    if(!studentMap[email]) studentMap[email] = { email: email, completedSections: 0, scores: [], lastActive: p.Timestamp };
-    studentMap[email].completedSections++;
-    if (new Date(p.Timestamp) > new Date(studentMap[email].lastActive)) {
-        studentMap[email].lastActive = p.Timestamp;
-    }
+      const email = String(p.Email).trim().toLowerCase();
+      if(!studentMap[email]) { // ถ้าเจอคนที่ไม่ได้ลงทะเบียน Profile ไว้
+          studentMap[email] = { email: email, fullName: email, nickname: '-', department: '-', position: '-', profileImage: '', completedSections: [], scores: {}, totalBN: 0, lastActive: null };
+      }
+      
+      if (sectionMap[p.SectionID] && !studentMap[email].completedSections.includes(p.SectionID)) {
+          studentMap[email].completedSections.push(p.SectionID);
+          studentMap[email].totalBN += sectionMap[p.SectionID].vp; // บวกแต้มวิดีโอ
+      }
+      // จำวันที่แอคทีฟล่าสุด
+      if (!studentMap[email].lastActive || new Date(p.Timestamp) > new Date(studentMap[email].lastActive)) {
+          studentMap[email].lastActive = p.Timestamp;
+      }
   });
 
+  // 3. นำประวัติการสอบมาใส่และบวกคะแนนโบนัส QuizPoints
   scores.forEach(s => {
-    const email = String(s.Email).trim().toLowerCase();
-    if(!studentMap[email]) studentMap[email] = { email: email, completedSections: 0, scores: [], lastActive: s.Timestamp };
-    studentMap[email].scores.push({
-        score: s.Score,
-        total: s.TotalQuestions,
-        percent: (s.Score / s.TotalQuestions) * 100
-    });
-    if (new Date(s.Timestamp) > new Date(studentMap[email].lastActive)) {
-        studentMap[email].lastActive = s.Timestamp;
-    }
+      const email = String(s.Email).trim().toLowerCase();
+      if(!studentMap[email]) {
+          studentMap[email] = { email: email, fullName: email, nickname: '-', department: '-', position: '-', profileImage: '', completedSections: [], scores: {}, totalBN: 0, lastActive: null };
+      }
+      
+      if (sectionMap[s.SectionID]) {
+          const percent = s.TotalQuestions > 0 ? (s.Score / s.TotalQuestions) : 0;
+          
+          if (percent >= 0.5) { // ถ้าสอบผ่าน
+             if (!studentMap[email].scores[s.SectionID]) { // ถ้ายังไม่เคยได้โบนัสข้อนี้
+                 studentMap[email].scores[s.SectionID] = percent;
+                 studentMap[email].totalBN += sectionMap[s.SectionID].qp; // บวกแต้มโบนัส
+             }
+          } else { // ถ้าสอบตก ก็บันทึกไว้ว่าเคยสอบ
+             if (!studentMap[email].scores[s.SectionID]) {
+                 studentMap[email].scores[s.SectionID] = percent; 
+             }
+          }
+      }
+
+      if (!studentMap[email].lastActive || new Date(s.Timestamp) > new Date(studentMap[email].lastActive)) {
+          studentMap[email].lastActive = s.Timestamp;
+      }
   });
 
+  // 4. สรุปผลและคำนวณ % ความคืบหน้า
   const students = Object.values(studentMap).map(std => {
-    std.progressPercent = totalSections > 0 ? Math.round((std.completedSections / totalSections) * 100) : 0;
-    if (std.scores.length > 0) {
-        const sumPercent = std.scores.reduce((sum, current) => sum + current.percent, 0);
-        std.averageScore = Math.round(sumPercent / std.scores.length);
-    } else {
-        std.averageScore = 0;
-    }
-    return std;
-  });
+      // คำนวณ % การดูวิดีโอ
+      std.progressPercent = totalSections > 0 ? Math.round((std.completedSections.length / totalSections) * 100) : 0;
+      
+      // คำนวณ % คะแนนสอบเฉลี่ย
+      const scoreValues = Object.values(std.scores);
+      if (scoreValues.length > 0) {
+          const sumPercent = scoreValues.reduce((sum, val) => sum + (val * 100), 0);
+          std.averageScore = Math.round(sumPercent / scoreValues.length);
+      } else {
+          std.averageScore = 0;
+      }
+      
+      // จัดรูปแบบวันที่ให้อ่านง่าย
+      if (std.lastActive) {
+          const d = new Date(std.lastActive);
+          std.lastActiveStr = d.toLocaleDateString('th-TH') + ' ' + d.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'});
+      } else {
+          std.lastActiveStr = '-';
+      }
+      
+      return std;
+  }).filter(std => std.completedSections.length > 0 || Object.keys(std.scores).length > 0); // กรองเอาเฉพาะคนที่มีประวัติการเรียนโชว์ในตาราง
 
   return {
       totalStudents: students.length,
       totalSections: totalSections,
-      students: students.sort((a,b) => b.progressPercent - a.progressPercent) 
+      totalLessons: lessons.length,
+      students: students.sort((a,b) => b.totalBN - a.totalBN) // เรียงลำดับจาก BN มากสุดไปน้อยสุด (Leaderboard)
   };
 }
 
