@@ -104,9 +104,30 @@
     color: #31c1d7; 
     box-shadow: inset 0 0 0 1px rgba(49, 193, 215, 0.15);
   }
+
+  /* --- เพิ่มพื้นหลังแบบจางๆ ให้กับทุกหน้าเว็บ --- */
+  body::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-image: url('https://i.postimg.cc/Dz2GHBk5/Gemini-Generated-Image-nhw19nhw19nhw19n.png');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    /* ปรับความเข้ม/จาง ตรงนี้ (ค่าน้อยยิ่งจาง, 1 คือเข้มสุด) */
+    opacity: 0.3; 
+    z-index: -10; /* ดันไปอยู่เลเยอร์หลังสุด */
+    pointer-events: none; /* ทะลุการคลิก */
+  }
 </style>
 
 <script>
+  // ดึง Profile จากตัวแปรฝั่งเซิร์ฟเวอร์โดยตรง (ตัวแปรนี้มีอยู่แล้วในทุกๆ หน้า รวมถึงหน้า Admin)
+  const serverUserProfile = <?!= typeof userProfile !== 'undefined' ? JSON.stringify(userProfile) : '{}' ?>;
+
   window.currentTotalBN = 0;
   window.initialCalcDone = false;
 
@@ -119,15 +140,14 @@
       return { name: 'Novice', th: 'ผู้เริ่มต้น', icon: '🥉', color: 'text-slate-500', bg: 'bg-slate-50', border: 'border-slate-200', next: 100, min: 0 };
   }
 
-  // ระบบอัปเดตคะแนนแบบ Real-time ที่ดึงข้อมูลจาก Code.gs ตรงๆ
+  // ระบบอัปเดตคะแนนแบบ Real-time ดึงค่าจากชีทโดยตรง!
   window.updateNavbarRank = function(liveData, addPoints = 0) {
       
-      // ถ้าระบบสั่งบวกคะแนน (เช่น ตอนเรียนจบ หรือสอบผ่าน) 
+      // ถ้าระบบสั่งบวกคะแนน (เช่น ตอนเรียนจบ หรือสอบผ่าน) ก็บวกเข้าตัวเลขที่โชว์อยู่ได้เลย
       if (addPoints > 0) {
           window.currentTotalBN += addPoints;
-          window.initialCalcDone = true;
       } 
-      // ถ้าเป็นการเปิดเว็บครั้งแรก
+      // ถ้าโหลดเว็บครั้งแรก (รีเฟรชหน้า)
       else if (!window.initialCalcDone) {
           let data = liveData; 
           if (!data) { 
@@ -137,12 +157,23 @@
               }
           }
           
-          // ดึงค่า totalBN ตรงๆ จากที่ Code.gs ส่งมา (รับประกันความแม่นยำ 100%)
-          if (data && data.userInfo && typeof data.userInfo.totalBN !== 'undefined') {
+          // 1. ลองดึงคะแนนจากตัวแปร Profile หลักก่อน (การันตีว่าได้ผลในทุกหน้า แม้แต่หน้า Admin)
+          if (serverUserProfile && serverUserProfile.TotalBN !== undefined && serverUserProfile.TotalBN !== '') {
+              window.currentTotalBN = parseInt(serverUserProfile.TotalBN) || 0;
+          } 
+          // 2. ถ้าหาไม่เจอ ค่อยไปควานหาใน Data ของหน้า Student
+          else if (data && data.userInfo && data.userInfo.profile && data.userInfo.profile.TotalBN !== undefined && data.userInfo.profile.TotalBN !== '') {
+              window.currentTotalBN = parseInt(data.userInfo.profile.TotalBN) || 0;
+          } 
+          // 3. หรือดึงจากตัวแปรที่ Code.gs อุตส่าห์บวกสดๆ มาให้
+          else if (data && data.userInfo && data.userInfo.totalBN !== undefined) {
               window.currentTotalBN = parseInt(data.userInfo.totalBN) || 0;
-          } else {
+          } 
+          // 4. ท้ายที่สุด ถ้าหาไม่ได้จริงๆ ถึงจะเป็น 0
+          else {
               window.currentTotalBN = 0;
           }
+          
           window.initialCalcDone = true;
       }
       
@@ -165,7 +196,7 @@
       // ส่งข้อมูลอัปเดตนี้ไปยังหน้า Profile_View ด้วยเพื่อให้การ์ดอัปเดตตาม
       window.userRankData = { bn: window.currentTotalBN, rank: rank };
       document.dispatchEvent(new CustomEvent('rankDataReady'));
-  }
+  };
 
   (function() {
     function updateActiveNav(currentPage, currentTab) {
