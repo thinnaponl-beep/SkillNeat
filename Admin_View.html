@@ -11,6 +11,10 @@
     .checkbox-group-scroll { max-height: 140px; overflow-y: auto; }
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    
+    /* เอฟเฟกต์เพิ่มเติมสำหรับ Leaderboard */
+    .leaderboard-card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+    .leaderboard-card:hover { transform: translateY(-4px); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05); }
   </style>
 </head>
 <body class="bg-slate-50 font-sans min-h-screen flex flex-col">
@@ -151,13 +155,146 @@
         </div>
     </div>
 
-    <!-- แท็บ 4: Dashboard -->
+    <!-- แท็บ 4: Dashboard (แทนที่ด้วยระบบรายงานผลใหม่) -->
     <div id="dashboard-content" class="hidden animate-fade-slide-up flex-grow">
-        <div class="bg-white rounded-3xl shadow-sm border border-slate-200 p-12 text-center flex flex-col items-center justify-center h-full min-h-[50vh]">
-            <svg class="w-16 h-16 text-[#31c1d7]/40 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
-            <h3 class="text-xl font-bold text-slate-700">ระบบรายงานผลและสถิติ</h3>
-            <p class="text-slate-500 mt-2">กำลังอยู่ในระหว่างการพัฒนา (รวมถึงสถิติ Leaderboard) จะพร้อมใช้งานเร็วๆ นี้</p>
+        
+        <!-- Header Dashboard -->
+        <div class="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pl-2">
+            <div>
+                <h2 class="text-2xl font-bold text-slate-800">ภาพรวมการพัฒนาบุคลากร</h2>
+                <p class="text-slate-500 text-sm mt-1">สถิติการเรียนรู้และคะแนนสะสมของพนักงานทั้งหมด</p>
+            </div>
+            <button onclick="loadDashboardData()" class="bg-[#31c1d7]/10 text-[#31c1d7] hover:bg-[#31c1d7]/20 px-4 py-2.5 rounded-xl font-bold transition flex items-center gap-2 text-sm shadow-sm">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                อัปเดตข้อมูลล่าสุด
+            </button>
         </div>
+
+        <!-- 1. การ์ดสรุปสถิติ (Summary Cards) -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div class="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 flex items-center gap-4">
+                <div class="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-500">
+                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                </div>
+                <div>
+                    <p class="text-sm font-bold text-slate-500">พนักงานทั้งหมด</p>
+                    <h3 class="text-2xl font-extrabold text-slate-800" id="dash-total-users">- <span class="text-sm font-medium text-slate-400">คน</span></h3>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 flex items-center gap-4">
+                <div class="w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-500">
+                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+                </div>
+                <div>
+                    <p class="text-sm font-bold text-slate-500">กำลังเข้าเรียน</p>
+                    <h3 class="text-2xl font-extrabold text-slate-800" id="dash-active-users">- <span class="text-sm font-medium text-slate-400">คน</span></h3>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 flex items-center gap-4">
+                <div class="w-14 h-14 rounded-2xl bg-[#31c1d7]/10 flex items-center justify-center text-[#31c1d7]">
+                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                </div>
+                <div class="w-full">
+                    <p class="text-sm font-bold text-slate-500">ความคืบหน้าเฉลี่ย</p>
+                    <div class="flex items-center gap-2 mt-1">
+                        <div class="w-full bg-slate-100 rounded-full h-2">
+                            <div class="bg-[#31c1d7] h-2 rounded-full" id="dash-avg-progress-bar" style="width: 0%"></div>
+                        </div>
+                        <span class="text-sm font-extrabold text-slate-700" id="dash-avg-progress-text">-%</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 flex items-center gap-4">
+                <div class="w-14 h-14 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-500">
+                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"></path></svg>
+                </div>
+                <div>
+                    <p class="text-sm font-bold text-slate-500">คอร์สเรียนทั้งหมด</p>
+                    <h3 class="text-2xl font-extrabold text-slate-800" id="dash-total-courses">- <span class="text-sm font-medium text-slate-400">วิชา</span></h3>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. กระดานผู้นำ (Leaderboard) -->
+        <h3 class="text-lg font-bold text-slate-800 mb-4 pl-2 flex items-center gap-2">
+            <span class="text-2xl">🏆</span> Top 3 พนักงานคะแนนสะสมสูงสุด
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8" id="dashboard-leaderboard">
+            <!-- ข้อมูล Mockup สำหรับรอดู UI (จะถูกแทนที่ด้วย JS) -->
+            <div class="bg-white rounded-3xl shadow-sm border border-slate-100 p-6 flex flex-col items-center leaderboard-card relative overflow-hidden md:mt-6">
+                <div class="w-16 h-16 rounded-full bg-slate-100 border-4 border-slate-200 flex items-center justify-center text-2xl mb-3">🥈</div>
+                <h3 class="font-bold text-lg text-slate-800">กำลังโหลด...</h3>
+                <p class="text-sm text-slate-500 mb-3">-</p>
+                <div class="text-xl font-extrabold text-slate-500">- BN</div>
+            </div>
+            <div class="bg-white rounded-3xl shadow-md border border-amber-200 p-6 flex flex-col items-center leaderboard-card relative overflow-hidden transform md:-translate-y-4">
+                <div class="w-20 h-20 rounded-full bg-amber-50 border-4 border-amber-300 flex items-center justify-center text-4xl mb-3 relative">🥇</div>
+                <h3 class="font-bold text-xl text-slate-800">กำลังโหลด...</h3>
+                <p class="text-sm text-slate-500 mb-3">-</p>
+                <div class="text-2xl font-black text-amber-500">- BN</div>
+            </div>
+            <div class="bg-white rounded-3xl shadow-sm border border-slate-100 p-6 flex flex-col items-center leaderboard-card relative overflow-hidden md:mt-6">
+                <div class="w-16 h-16 rounded-full bg-orange-50 border-4 border-orange-200 flex items-center justify-center text-2xl mb-3">🥉</div>
+                <h3 class="font-bold text-lg text-slate-800">กำลังโหลด...</h3>
+                <p class="text-sm text-slate-500 mb-3">-</p>
+                <div class="text-xl font-extrabold text-orange-500">- BN</div>
+            </div>
+        </div>
+
+        <!-- 3. ส่วนของตารางข้อมูลและปุ่ม Export -->
+        <div class="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+            <!-- Header ตาราง และกลุ่มปุ่ม Export -->
+            <div class="p-6 border-b border-slate-100 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                <div>
+                    <h3 class="text-lg font-bold text-slate-800">ข้อมูลพนักงานรายบุคคล</h3>
+                    <p class="text-sm text-slate-500 mt-1">รายละเอียดการเรียนและคะแนนสะสม</p>
+                </div>
+                
+                <div class="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+                    <!-- ช่องค้นหา -->
+                    <div class="relative flex-grow lg:flex-grow-0">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        </div>
+                        <input type="text" id="dashboard-search" placeholder="ค้นหาชื่อ, แผนก..." class="w-full lg:w-56 pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#31c1d7] transition-all">
+                    </div>
+                    
+                    <!-- ปุ่ม Export -->
+                    <button onclick="exportDashboardData('csv')" class="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold rounded-xl shadow-sm transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        Export CSV
+                    </button>
+                </div>
+            </div>
+
+            <!-- โครงสร้างตาราง -->
+            <div class="w-full overflow-x-auto custom-scrollbar">
+                <table class="w-full text-left border-collapse whitespace-nowrap">
+                    <thead>
+                        <tr class="bg-slate-50/80 text-slate-600 text-sm border-b border-slate-200">
+                            <th class="p-4 font-bold">พนักงาน</th>
+                            <th class="p-4 font-bold">แผนก / ตำแหน่ง</th>
+                            <th class="p-4 font-bold w-48">ความคืบหน้า (%)</th>
+                            <th class="p-4 font-bold text-center">คอร์สที่เรียนจบ</th>
+                            <th class="p-4 font-bold text-center text-[#31c1d7]">BN Score</th>
+                            <th class="p-4 font-bold text-center">Rank</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dashboard-table-body" class="text-sm text-slate-700 divide-y divide-slate-100">
+                        <tr>
+                            <td colspan="6" class="p-8 text-center text-slate-500">กำลังโหลดข้อมูล...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="p-4 border-t border-slate-100 bg-slate-50 text-xs text-slate-500 text-center">
+                * ข้อมูลรายงานผลผู้เรียนจะอัปเดตอัตโนมัติเมื่อกด "อัปเดตข้อมูลล่าสุด"
+            </div>
+        </div>
+        
     </div>
 
   </div>
@@ -342,6 +479,11 @@
         // กำหนดสีแท็บที่ Active ให้เป็นสี #31c1d7
         const activeTab = document.getElementById('tab-' + tabName);
         if(activeTab) activeTab.className = 'whitespace-nowrap py-2.5 px-6 rounded-xl font-bold text-sm transition-all bg-[#31c1d7]/10 text-[#31c1d7]';
+        
+        // ถ้าเป็นแท็บ Dashboard ให้พยายามดึงข้อมูล (ฟังก์ชันนี้เดี๋ยวเราเขียนต่อใน Admin_JS)
+        if(tabName === 'dashboard' && typeof loadDashboardData === 'function') {
+            loadDashboardData();
+        }
     }
   </script>
 
