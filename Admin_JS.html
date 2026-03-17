@@ -49,6 +49,7 @@ if (!masterData || (!masterData.categories && !masterData.departments)) {
 
 var activeLessonId = null;
 var activeSectionId = null;
+var currentEmailTags = []; // <-- เพิ่มตัวแปรสำหรับเก็บรายการ Tag อีเมล
 
 document.addEventListener('DOMContentLoaded', function() {
     renderSettingsLists(); 
@@ -308,7 +309,11 @@ function openLessonModal(lessonId) {
         document.getElementById('lesson-desc').value = lesson.Description;
         document.getElementById('lesson-is-active').checked = lesson.IsActive;
         if(lesson.Category) document.getElementById('lesson-category').value = lesson.Category;
-        document.getElementById('lesson-emails').value = lesson.TargetEmails || '';
+        
+        // ระบบ Tag อีเมล: ดึงข้อมูลเดิมมาสร้างเป็น Tag
+        currentEmailTags = (lesson.TargetEmails || '').split(',').map(function(s) { return s.trim().toLowerCase(); }).filter(Boolean);
+        renderEmailTags();
+        document.getElementById('lesson-email-input').value = '';
 
         if (lesson.TargetDepartments) {
             const depts = lesson.TargetDepartments.split(',').map(function(s) { return s.trim(); });
@@ -333,6 +338,11 @@ function openLessonModal(lessonId) {
         if(firstDept) firstDept.checked = true;
         const firstPos = document.querySelector('input[name="target-pos"][value="ทั้งหมด (All)"]');
         if(firstPos) firstPos.checked = true;
+
+        // เคลียร์ค่า Tag อีเมลเมื่อเพิ่มคอร์สใหม่
+        currentEmailTags = [];
+        renderEmailTags();
+        document.getElementById('lesson-email-input').value = '';
 
         document.getElementById('lesson-modal-title').textContent = 'เพิ่มคอร์สเรียนใหม่';
     }
@@ -359,7 +369,7 @@ function saveLesson(e) {
         IsActive: document.getElementById('lesson-is-active').checked,
         TargetDepartments: selectedDepts.join(', '),
         TargetPositions: selectedPositions.join(', '),
-        TargetEmails: document.getElementById('lesson-emails').value.trim()
+        TargetEmails: currentEmailTags.join(',') // ดึงข้อมูลจาก Array ของ Tag 
     };
 
     const isNew = !lessonData.LessonID;
@@ -922,6 +932,48 @@ function closeModals() {
     }
 }
 
+/* ==========================================
+   ฟังก์ชันจัดการระบบ Tag อีเมล
+========================================== */
+function renderEmailTags() {
+    const wrapper = document.getElementById('email-tags-wrapper');
+    if(!wrapper) return;
+    wrapper.innerHTML = '';
+    currentEmailTags.forEach(function(email) {
+        const tag = document.createElement('span');
+        tag.className = 'inline-flex items-center px-2.5 py-1 rounded-md text-sm font-medium bg-[#31c1d7]/10 text-[#31c1d7] border border-[#31c1d7]/20';
+        tag.innerHTML = email + '<button type="button" onclick="removeEmailTag(\'' + email + '\')" class="ml-1.5 inline-flex text-[#31c1d7] hover:text-red-500 focus:outline-none"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>';
+        wrapper.appendChild(tag);
+    });
+}
+
+function addEmailTag(emailStr) {
+    // รองรับการ Copy/Paste หลายอีเมลพร้อมกัน (แยกด้วย , หรือเว้นวรรค)
+    const emails = emailStr.split(/[\s,]+/).map(function(s) { return s.trim().toLowerCase(); }).filter(Boolean);
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/; // รูปแบบอีเมลเบื้องต้น
+    
+    let hasInvalid = false;
+    emails.forEach(function(email) {
+        if (!currentEmailTags.includes(email)) {
+            if (emailRegex.test(email)) {
+                currentEmailTags.push(email);
+            } else {
+                hasInvalid = true;
+            }
+        }
+    });
+    
+    if(hasInvalid) showAdminToast('ข้ามอีเมลรูปแบบไม่ถูกต้อง', 'error');
+    
+    renderEmailTags();
+    document.getElementById('lesson-email-input').value = '';
+}
+
+function removeEmailTag(email) {
+    currentEmailTags = currentEmailTags.filter(function(e) { return e !== email; });
+    renderEmailTags();
+}
+
 /* Binding Forms */
 function setupEventListeners() {
     const lessonForm = document.getElementById('lesson-form');
@@ -933,5 +985,27 @@ function setupEventListeners() {
     if(sectionForm) sectionForm.addEventListener('submit', saveSection);
     if(quizForm) quizForm.addEventListener('submit', saveQuiz);
     if(userForm) userForm.addEventListener('submit', saveUser);
+    
+    // ตั้งค่า Event ให้อินพุตของ Email Tag
+    const emailInput = document.getElementById('lesson-email-input');
+    if (emailInput) {
+        emailInput.addEventListener('keydown', function(e) {
+            // เมื่อกด Enter, Spacebar หรือ ลูกน้ำ (,)
+            if (e.key === 'Enter' || e.key === ' ' || e.key === ',') {
+                e.preventDefault(); // ป้องกันฟอร์ม Submit
+                addEmailTag(this.value);
+            }
+            // เมื่อกด Backspace และช่องว่างเปล่า ให้ลบ Tag สุดท้ายออก
+            if (e.key === 'Backspace' && this.value === '' && currentEmailTags.length > 0) {
+                currentEmailTags.pop();
+                renderEmailTags();
+            }
+        });
+        
+        // เมื่อคลิกออกไปนอกช่อง (Blur) ถ้ามีข้อความค้างอยู่ให้สร้างเป็น Tag เลย
+        emailInput.addEventListener('blur', function() {
+            addEmailTag(this.value);
+        });
+    }
 }
 </script>
