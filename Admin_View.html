@@ -208,7 +208,11 @@
                 </div>
                 <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                     <label class="block text-sm font-bold text-slate-800 mb-1">เจาะจงรายบุคคล (ระบุอีเมล)</label>
-                    <textarea id="lesson-emails" rows="2" placeholder="อีเมล (คั่นด้วยลูกน้ำ)..." class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none text-sm custom-scrollbar focus:ring-2 focus:ring-[#31c1d7]"></textarea>
+                    <p class="text-[11px] text-slate-500 mb-2">พิมพ์อีเมลแล้วกด <kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded-md text-slate-600 font-mono">Enter</kbd> หรือ <kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded-md text-slate-600 font-mono">Spacebar</kbd></p>
+                    <div class="flex flex-wrap items-center gap-2 w-full p-2 bg-slate-50 border border-slate-200 rounded-lg min-h-[46px] focus-within:ring-2 focus-within:ring-[#31c1d7] transition-all cursor-text" onclick="document.getElementById('lesson-email-input').focus()">
+                        <div id="email-tags-wrapper" class="flex flex-wrap items-center gap-2"></div>
+                        <input type="text" id="lesson-email-input" placeholder="เพิ่มอีเมล..." class="flex-grow bg-transparent border-none outline-none text-sm min-w-[120px] p-1">
+                    </div>
                 </div>
             </div>
         </div>
