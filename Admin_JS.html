@@ -10,6 +10,9 @@ var quizzes = [];
 var masterData = null;
 var users = [];
 
+// ตัวแปรสำหรับเก็บอีเมลของผู้ใช้งานปัจจุบัน เพื่อไว้แสดง "อันดับของคุณ"
+var currentUserEmail = null;
+
 /* วิเคราะห์โครงสร้างข้อมูลที่ส่งมาจาก Backend และแยกตัวแปรให้ถูกต้อง */
 if (adminData.lessons && typeof adminData.lessons === 'object' && !Array.isArray(adminData.lessons)) {
     // กรณีข้อมูลซ้อนอยู่ใน Object (Legacy Structure)
@@ -63,6 +66,20 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     setupEventListeners();
+
+    // ดึงข้อมูลอีเมลผู้ใช้ปัจจุบันเพื่อทำ "อันดับของคุณ"
+    if (typeof google !== 'undefined' && google.script) {
+        google.script.run.withSuccessHandler(function(res) {
+            if(res && res.userInfo) {
+                currentUserEmail = res.userInfo.email;
+                // หากหน้า Dashboard ถูกโหลดมาแล้ว ให้รีเรนเดอร์ Leaderboard อีกรอบ
+                if (dashboardDataList && dashboardDataList.length > 0) {
+                    const sortedUsers = [...dashboardDataList].sort(function(a, b) { return (b.totalBN || 0) - (a.totalBN || 0); });
+                    renderLeaderboard(sortedUsers);
+                }
+            }
+        }).getStudentData();
+    }
 });
 
 /* ==========================================
@@ -211,6 +228,8 @@ function showAdminToast(message, type) {
     const toast = document.createElement('div');
     const icon = type === 'success' 
         ? '<div class="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center mr-3"><svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg></div>'
+        : type === 'warning'
+        ? '<div class="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center mr-3"><svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg></div>'
         : '<div class="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center mr-3"><svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"></path></svg></div>';
     
     toast.className = 'fixed top-6 right-6 flex items-center p-4 bg-white border border-slate-100 rounded-2xl shadow-lg z-[9999] transform transition-all duration-300 translate-x-full opacity-0 max-w-sm';
@@ -222,7 +241,7 @@ function showAdminToast(message, type) {
     setTimeout(function() {
         toast.classList.add('translate-x-full', 'opacity-0');
         setTimeout(function() { toast.remove(); }, 300);
-    }, 3000);
+    }, 4000);
 }
 
 function safeReload() {
@@ -1006,6 +1025,343 @@ function setupEventListeners() {
         emailInput.addEventListener('blur', function() {
             addEmailTag(this.value);
         });
+    }
+}
+
+/* ============================================================================
+   [ส่วนที่ 7] ระบบรายงานผลและสถิติ (Dashboard & Leaderboard)
+============================================================================ */
+
+let dashboardDataList = []; 
+
+function getRankName(score) {
+    const numScore = parseInt(score) || 0;
+    if(numScore >= 2000) return 'ปรมาจารย์';
+    if(numScore >= 1000) return 'ผู้เชี่ยวชาญ';
+    if(numScore >= 500) return 'นักรบ';
+    return 'ผู้เริ่มต้น';
+}
+
+function loadDashboardData() {
+    const tbody = document.getElementById('dashboard-table-body');
+    if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-slate-500"><svg class="animate-spin h-5 w-5 mx-auto text-[#31c1d7] mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>กำลังรวบรวมข้อมูลจากระบบหลังบ้าน...</td></tr>';
+    }
+    
+    if (typeof google === 'undefined' || !google.script) {
+        showAdminToast("ไม่สามารถเชื่อมต่อกับ Google Apps Script ได้", "error");
+        if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-red-500">ทำงานนอกสภาพแวดล้อม Google Apps Script</td></tr>';
+        return;
+    }
+
+    // เรียกฟังก์ชัน getDashboardStats ที่คุณเบสร้างไว้ใน Code.gs
+    google.script.run
+        .withSuccessHandler(function(res) {
+            // ระบบแปลง JSON String ให้กลับเป็น Object เพื่อแก้ปัญหา Google Apps Script ขัดข้องเรื่อง Date Object
+            let parsedData = res;
+            if (typeof res === 'string') {
+                try { parsedData = JSON.parse(res); } 
+                catch(e) { console.error("JSON Parse Error:", e); }
+            }
+            processDashboardData(parsedData);
+        })
+        .withFailureHandler(function(err) {
+            console.error("Dashboard Error:", err);
+            showAdminToast("เกิดข้อผิดพลาดในการดึงข้อมูล", "error");
+            if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-red-500">เกิดข้อผิดพลาด: ' + (err.message || err) + '</td></tr>';
+        })
+        .getDashboardStats();
+}
+
+function processDashboardData(data) {
+    const tbody = document.getElementById('dashboard-table-body');
+
+    // กรณีเซิร์ฟเวอร์ส่ง Error กลับมา
+    if (data && data.error) {
+        showAdminToast(data.error, "error");
+        if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-red-500">${data.error}</td></tr>`;
+        return;
+    }
+
+    // กรณีไม่มีข้อมูล หรือ โหลดไม่ได้
+    if (!data || !data.students || !Array.isArray(data.students)) {
+        if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-slate-500">ไม่พบข้อมูล หรือโหลดข้อมูลล้มเหลว (โปรดตรวจสอบการแปลง JSON ที่ Code.gs)</td></tr>';
+        
+        // เคลียร์ค่าให้เป็น 0 ป้องกันกล่องข้อมูลค้าง
+        document.getElementById('dash-total-users').innerHTML = '0 <span class="text-sm font-medium text-slate-400">คน</span>';
+        document.getElementById('dash-active-users').innerHTML = '0 <span class="text-sm font-medium text-slate-400">คน</span>';
+        document.getElementById('dash-total-courses').innerHTML = '0 <span class="text-sm font-medium text-slate-400">วิชา</span>';
+        document.getElementById('dash-avg-progress-text').innerText = '0%';
+        document.getElementById('dash-avg-progress-bar').style.width = '0%';
+        
+        renderLeaderboard([]);
+        return;
+    }
+
+    dashboardDataList = data.students;
+
+    // 1. ส่วนของการ์ดสรุปผล (Summary Cards)
+    const totalUsersCount = data.totalStudents || (users ? users.length : 0);
+    const activeUsersCount = dashboardDataList.length; // จำนวนคนที่มีความคืบหน้าแล้ว
+    const totalLessonsCount = data.totalLessons || 0;
+
+    let avgProgress = 0;
+    if (totalUsersCount > 0) {
+        const totalProgress = dashboardDataList.reduce(function(sum, u) { return sum + (u.progressPercent || 0); }, 0);
+        avgProgress = Math.round(totalProgress / totalUsersCount);
+    }
+
+    document.getElementById('dash-total-users').innerHTML = totalUsersCount + ' <span class="text-sm font-medium text-slate-400">คน</span>';
+    document.getElementById('dash-active-users').innerHTML = activeUsersCount + ' <span class="text-sm font-medium text-slate-400">คน</span>';
+    document.getElementById('dash-total-courses').innerHTML = totalLessonsCount + ' <span class="text-sm font-medium text-slate-400">วิชา</span>';
+
+    const pBar = document.getElementById('dash-avg-progress-bar');
+    pBar.style.width = avgProgress + '%';
+    if (avgProgress >= 80) pBar.className = 'bg-emerald-500 h-2 rounded-full transition-all duration-1000';
+    else if (avgProgress >= 40) pBar.className = 'bg-amber-500 h-2 rounded-full transition-all duration-1000';
+    else pBar.className = 'bg-[#31c1d7] h-2 rounded-full transition-all duration-1000';
+    
+    document.getElementById('dash-avg-progress-text').innerText = avgProgress + '%';
+
+    // ถ้าไม่มีข้อมูลผู้เรียนที่มีความคืบหน้าให้เคลียร์ตาราง
+    if (dashboardDataList.length === 0) {
+        if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-slate-500">ยังไม่มีผู้เรียนที่เริ่มเรียนในระบบ</td></tr>';
+        renderLeaderboard([]);
+        return;
+    }
+
+    // 2. จัดเรียงข้อมูล และแสดงผล
+    // getDashboardStats จาก Code.gs เรียงคะแนนมาให้แล้ว แต่เราเรียงอีกรอบเพื่อความชัวร์
+    const sortedUsers = [...dashboardDataList].sort(function(a, b) { return (b.totalBN || 0) - (a.totalBN || 0); });
+    
+    // ส่งข้อมูลทุกคนไปที่ renderLeaderboard เพื่อให้ระบบหา Top 5 และหา "อันดับของคุณ"
+    renderLeaderboard(sortedUsers);
+    renderDashboardTable(sortedUsers);
+}
+
+function renderLeaderboard(sortedUsers) {
+    const container = document.getElementById('dashboard-leaderboard');
+    if (!sortedUsers || sortedUsers.length === 0) {
+        container.innerHTML = '<div class="col-span-3 text-center text-slate-500 py-8">ยังไม่มีข้อมูลผู้นำ</div>';
+        return;
+    }
+
+    // ==========================================
+    // ส่วนที่ 1: การสร้าง Top 3 (การ์ดแนวตั้ง)
+    // ==========================================
+    const top3 = sortedUsers.slice(0, 3);
+    const ranks = [
+        { data: top3[1], icon: '🥈', color: 'slate',   scoreColor: 'text-slate-500',  border: 'border-slate-100', bg: 'bg-slate-50',     mt: 'md:mt-6', translate: '', shadow: 'shadow-sm' },
+        { data: top3[0], icon: '🥇', color: 'amber',   scoreColor: 'text-amber-500',  border: 'border-amber-300', bg: 'bg-amber-50',     mt: '', translate: 'transform md:-translate-y-4', shadow: 'shadow-md border-amber-200' },
+        { data: top3[2], icon: '🥉', color: 'orange',  scoreColor: 'text-orange-500', border: 'border-orange-200',bg: 'bg-orange-50',    mt: 'md:mt-6', translate: '', shadow: 'shadow-sm' }
+    ];
+
+    let top3Html = '<div class="col-span-1 md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-6">';
+    ranks.forEach(function(rank, index) {
+        if (!rank.data) {
+            top3Html += '<div class="bg-white rounded-3xl shadow-sm border border-slate-100 p-6 flex flex-col items-center leaderboard-card relative overflow-hidden ' + rank.mt + '">' +
+                '<div class="w-16 h-16 rounded-full bg-slate-50 border-4 border-slate-100 flex items-center justify-center text-2xl mb-3">' + rank.icon + '</div>' +
+                '<h3 class="font-bold text-lg text-slate-300">ยังไม่มีผู้รั้งตำแหน่ง</h3>' +
+            '</div>';
+            return;
+        }
+
+        const isFirst = index === 1;
+        const sizeClass = isFirst ? 'w-20 h-20 text-4xl' : 'w-16 h-16 text-2xl';
+        const nameClass = isFirst ? 'text-xl' : 'text-lg';
+        const scoreClass = isFirst ? 'text-2xl' : 'text-xl';
+        const rankName = getRankName(rank.data.totalBN);
+        const displayName = rank.data.fullName || rank.data.email || '-';
+        const displayDept = rank.data.department || 'General';
+
+        top3Html += '<div class="bg-white rounded-3xl ' + rank.shadow + ' p-6 flex flex-col items-center leaderboard-card relative overflow-hidden ' + rank.mt + ' ' + rank.translate + '">' +
+            '<div class="' + sizeClass + ' rounded-full ' + rank.bg + ' border-4 ' + rank.border + ' flex items-center justify-center mb-3 relative">' +
+                rank.icon +
+            '</div>' +
+            '<h3 class="font-bold ' + nameClass + ' text-slate-800 text-center truncate w-full" title="' + displayName + '">' + displayName + '</h3>' +
+            '<p class="text-sm text-slate-500 mb-3 text-center">' + displayDept + '</p>' +
+            '<div class="' + scoreClass + ' font-black ' + rank.scoreColor + '">' +
+                new Intl.NumberFormat().format(rank.data.totalBN || 0) + ' <span class="text-sm font-medium text-slate-400">BN</span>' +
+            '</div>' +
+            '<div class="mt-3 px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold border border-slate-200">' +
+                rankName +
+            '</div>' +
+        '</div>';
+    });
+    top3Html += '</div>';
+
+    // ==========================================
+    // ส่วนที่ 2: การสร้างอันดับ 4 - 5 (แนวนอน)
+    // ==========================================
+    let otherRanksHtml = '<div class="flex flex-col gap-3">';
+    for(let i = 3; i < 5; i++) {
+        if(sortedUsers[i]) {
+            const u = sortedUsers[i];
+            const rankName = getRankName(u.totalBN);
+            otherRanksHtml += '<div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-3.5 flex items-center justify-between hover:shadow-md transition">' +
+                '<div class="flex items-center gap-4 overflow-hidden">' +
+                    '<div class="w-10 h-10 rounded-full bg-slate-50 border border-slate-100 text-slate-500 font-bold flex flex-shrink-0 items-center justify-center text-lg">' + (i + 1) + '</div>' +
+                    '<div class="truncate">' +
+                        '<h4 class="font-bold text-slate-800 text-sm truncate">' + (u.fullName || u.email || '-') + '</h4>' +
+                        '<p class="text-xs text-slate-500 truncate">' + (u.department || 'General') + '</p>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="text-right flex-shrink-0 pl-2">' +
+                    '<div class="font-black text-slate-700 text-base">' + new Intl.NumberFormat().format(u.totalBN || 0) + ' <span class="text-[10px] text-slate-400 font-medium">BN</span></div>' +
+                    '<div class="text-[10px] text-slate-500 font-medium mt-0.5">' + rankName + '</div>' +
+                '</div>' +
+            '</div>';
+        } else {
+            otherRanksHtml += '<div class="bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 p-3.5 flex items-center justify-center h-[74px]">' +
+                '<span class="text-sm text-slate-400">ยังไม่มีผู้รั้งอันดับ ' + (i + 1) + '</span>' +
+            '</div>';
+        }
+    }
+    otherRanksHtml += '</div>';
+
+    // ==========================================
+    // ส่วนที่ 3: การสร้าง "อันดับของคุณ" (แนวนอน ไฮไลต์สีฟ้า)
+    // ==========================================
+    let myRankHtml = '<div class="flex flex-col gap-3">';
+    if (currentUserEmail) {
+        const myIndex = sortedUsers.findIndex(function(u) { return u.email === currentUserEmail; });
+        if (myIndex !== -1) {
+            const me = sortedUsers[myIndex];
+            const rankName = getRankName(me.totalBN);
+            myRankHtml += '<div class="bg-gradient-to-r from-[#31c1d7]/10 to-[#1eb0c6]/10 rounded-2xl shadow-sm border border-[#31c1d7]/30 p-3.5 flex items-center justify-between ring-1 ring-[#31c1d7]/50">' +
+                '<div class="flex items-center gap-4 overflow-hidden">' +
+                    '<div class="w-10 h-10 rounded-full bg-gradient-to-br from-[#31c1d7] to-[#1eb0c6] text-white font-bold flex flex-shrink-0 items-center justify-center text-lg shadow-sm">' + (myIndex + 1) + '</div>' +
+                    '<div class="truncate">' +
+                        '<h4 class="font-bold text-[#1eb0c6] text-sm truncate">' + (me.fullName || me.email || '-') + ' <span class="text-[10px] bg-[#31c1d7]/20 text-[#1eb0c6] px-1.5 py-0.5 rounded ml-1">คุณ</span></h4>' +
+                        '<p class="text-xs text-[#31c1d7] truncate">' + (me.department || 'General') + '</p>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="text-right flex-shrink-0 pl-2">' +
+                    '<div class="font-black text-[#1eb0c6] text-base">' + new Intl.NumberFormat().format(me.totalBN || 0) + ' <span class="text-[10px] text-[#31c1d7] font-medium">BN</span></div>' +
+                    '<div class="text-[10px] text-[#1eb0c6] font-bold mt-0.5">' + rankName + '</div>' +
+                '</div>' +
+            '</div>';
+        } else {
+            myRankHtml += '<div class="bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 p-3.5 flex items-center justify-center h-[74px]">' +
+                '<span class="text-sm text-slate-400">คุณยังไม่มีข้อมูลการเรียนในระบบ</span>' +
+            '</div>';
+        }
+    } else {
+        // กรณีที่อีเมลกำลังโหลดอยู่
+        myRankHtml += '<div class="bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 p-3.5 flex items-center justify-center h-[74px]">' +
+            '<svg class="animate-spin h-4 w-4 mr-2 text-[#31c1d7]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>' +
+            '<span class="text-sm text-slate-400">กำลังค้นหาอันดับของคุณ...</span>' +
+        '</div>';
+    }
+    myRankHtml += '</div>';
+
+    // ==========================================
+    // ส่วนที่ 4: รวมทุกส่วนเข้าด้วยกัน
+    // ==========================================
+    let bottomHtml = '<div class="col-span-1 md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">' +
+                     '<div><h4 class="text-sm font-bold text-slate-500 mb-3 pl-1 flex items-center">✨ อันดับ 4 - 5</h4>' + otherRanksHtml + '</div>' +
+                     '<div><h4 class="text-sm font-bold text-[#31c1d7] mb-3 pl-1 flex items-center">🎯 อันดับของคุณ</h4>' + myRankHtml + '</div>' +
+                     '</div>';
+
+    container.innerHTML = top3Html + bottomHtml;
+}
+
+function renderDashboardTable(users) {
+    const tbody = document.getElementById('dashboard-table-body');
+    if (!users || users.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-slate-500">ไม่พบข้อมูลผู้เรียน</td></tr>';
+        return;
+    }
+
+    let html = '';
+    users.forEach(function(user) {
+        const progress = user.progressPercent || 0;
+        const totalBN = user.totalBN || 0;
+        const completedSections = user.completedSections ? user.completedSections.length : 0;
+        const rankName = getRankName(totalBN);
+        const displayName = user.fullName || '-';
+        const email = user.email || '';
+        const dept = user.department || 'General';
+        const pos = user.position || '-';
+
+        let pColor = 'bg-[#31c1d7]';
+        if (progress >= 80) pColor = 'bg-emerald-500';
+        else if (progress <= 30) pColor = 'bg-rose-500';
+
+        html += '<tr class="hover:bg-[#31c1d7]/5 transition-colors group">' +
+            '<td class="p-4">' +
+                '<div class="font-bold text-slate-800">' + displayName + '</div>' +
+                '<div class="text-xs text-slate-400">' + email + '</div>' +
+            '</td>' +
+            '<td class="p-4">' +
+                '<div class="font-medium text-slate-700">' + dept + '</div>' +
+                '<div class="text-xs text-slate-500">' + pos + '</div>' +
+            '</td>' +
+            '<td class="p-4">' +
+                '<div class="flex items-center gap-2">' +
+                    '<div class="w-full bg-slate-100 rounded-full h-2">' +
+                        '<div class="' + pColor + ' h-2 rounded-full" style="width: ' + progress + '%"></div>' +
+                    '</div>' +
+                    '<span class="text-xs font-extrabold text-slate-700 w-8">' + progress + '%</span>' +
+                '</div>' +
+            '</td>' +
+            '<td class="p-4 text-center font-bold text-slate-600">' + completedSections + '</td>' +
+            '<td class="p-4 text-center font-black text-[#31c1d7] text-base">' + new Intl.NumberFormat().format(totalBN) + '</td>' +
+            '<td class="p-4 text-center">' +
+                '<span class="px-2.5 py-1 bg-white border border-slate-200 text-slate-600 rounded-md text-xs font-bold shadow-sm group-hover:border-[#31c1d7] transition-colors">' +
+                    rankName +
+                '</span>' +
+            '</td>' +
+        '</tr>';
+    });
+
+    tbody.innerHTML = html;
+}
+
+document.getElementById('dashboard-search')?.addEventListener('input', function(e) {
+    const keyword = e.target.value.toLowerCase().trim();
+    if (!dashboardDataList) return;
+    
+    const filteredUsers = dashboardDataList.filter(function(u) {
+        return (u.fullName && u.fullName.toLowerCase().includes(keyword)) || 
+               (u.email && u.email.toLowerCase().includes(keyword)) || 
+               (u.department && u.department.toLowerCase().includes(keyword)) ||
+               (u.position && u.position.toLowerCase().includes(keyword));
+    });
+    
+    filteredUsers.sort(function(a, b) { return (b.totalBN || 0) - (a.totalBN || 0); });
+    renderDashboardTable(filteredUsers);
+});
+
+function exportDashboardData(format) {
+    if (!dashboardDataList || dashboardDataList.length === 0) {
+        alert('ไม่พบข้อมูลสำหรับส่งออก');
+        return;
+    }
+
+    if (format === 'csv') {
+        let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; 
+        csvContent += "อีเมลพนักงาน,ชื่อ-นามสกุล,แผนก,ตำแหน่ง,ความคืบหน้า (%),จำนวนตอนที่ดูจบ,คะแนน BN Score,Rank (ยศ)\r\n";
+        
+        const exportData = [...dashboardDataList].sort(function(a, b) { return (b.totalBN || 0) - (a.totalBN || 0); });
+
+        exportData.forEach(function(user) {
+            const completedSections = user.completedSections ? user.completedSections.length : 0;
+            const rankName = getRankName(user.totalBN);
+            
+            csvContent += '"' + (user.email || '') + '","' + (user.fullName || '') + '","' + (user.department || '') + '","' + (user.position || '') + '",' + (user.progressPercent || 0) + ',' + completedSections + ',' + (user.totalBN || 0) + ',"' + rankName + '"\r\n';
+        });
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        
+        const dateStr = new Date().toISOString().split('T')[0];
+        link.setAttribute("download", "HR_Academy_Report_" + dateStr + ".csv");
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     }
 }
 </script>
