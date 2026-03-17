@@ -798,12 +798,12 @@ function getDashboardStats() {
       return std;
   }).filter(std => std.completedSections.length > 0 || Object.keys(std.scores).length > 0); // กรองเอาเฉพาะคนที่มีประวัติการเรียนโชว์ในตาราง
 
-  return {
+  return JSON.stringify({
       totalStudents: students.length,
       totalSections: totalSections,
       totalLessons: lessons.length,
-      students: students.sort((a,b) => b.totalBN - a.totalBN) // เรียงลำดับจาก BN มากสุดไปน้อยสุด (Leaderboard)
-  };
+      students: students.sort((a,b) => b.totalBN - a.totalBN) 
+  });
 }
 
 function saveMasterData(masterData) {
