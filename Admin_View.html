@@ -55,26 +55,34 @@
       
       <!-- คอลัมน์ 1: คอร์สเรียน -->
       <div class="bg-white rounded-3xl shadow-sm border border-slate-200 flex flex-col h-[70vh] overflow-hidden">
-        <div class="p-5 border-b border-blue-100 bg-blue-50/50 flex justify-between items-center">
-            <div class="flex items-center space-x-3">
-                <div class="w-8 h-8 rounded-lg bg-blue-500 text-white flex items-center justify-center font-bold shadow-sm">1</div>
-                <h2 class="text-lg font-bold text-slate-800">คอร์สเรียนทั้งหมด</h2>
+        <div class="p-5 border-b border-blue-100 bg-blue-50/50 flex flex-col gap-3">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 rounded-lg bg-blue-500 text-white flex items-center justify-center font-bold shadow-sm">1</div>
+                    <h2 class="text-lg font-bold text-slate-800">คอร์สเรียนทั้งหมด</h2>
+                </div>
+                <button onclick="openLessonModal()" class="bg-blue-500 hover:bg-blue-600 text-white p-2 rounded-lg shadow-sm transition-colors" title="เพิ่มคอร์ส">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                </button>
             </div>
-            <button onclick="openLessonModal()" class="bg-blue-500 hover:bg-blue-600 text-white p-2 rounded-lg shadow-sm transition-colors" title="เพิ่มคอร์ส">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-            </button>
+            <div class="flex gap-2">
+                <input type="text" id="admin-lesson-search" oninput="renderLessonsList()" placeholder="ค้นหาชื่อคอร์ส..." class="flex-grow px-3 py-2 border border-blue-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-slate-700">
+                <select id="admin-lesson-category" onchange="renderLessonsList()" class="w-1/3 px-2 py-2 border border-blue-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-bold text-slate-600 bg-white">
+                    <option value="">ทุกหมวดหมู่</option>
+                </select>
+            </div>
         </div>
         <div id="admin-lessons-list" class="p-4 space-y-3 overflow-y-auto custom-scrollbar flex-grow bg-slate-50/50"></div>
       </div>
       
-      <!-- คอลัมน์ 2: วิดีโอ -->
+      <!-- คอลัมน์ 2: วิดีโอ / เนื้อหา -->
       <div class="bg-white rounded-3xl shadow-sm border border-slate-200 flex flex-col h-[70vh] overflow-hidden">
         <div class="p-5 border-b border-emerald-100 bg-emerald-50/50 flex justify-between items-center">
             <div class="flex items-center space-x-3">
                 <div class="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center font-bold shadow-sm">2</div>
-                <h2 id="section-header-title" class="text-lg font-bold text-slate-800">วิดีโอ (เลือกคอร์สก่อน)</h2>
+                <h2 id="section-header-title" class="text-lg font-bold text-slate-800">เนื้อหาย่อย (เลือกคอร์สก่อน)</h2>
             </div>
-            <button onclick="openSectionModal()" class="bg-emerald-500 hover:bg-emerald-600 text-white p-2 rounded-lg shadow-sm transition-colors" title="เพิ่มวิดีโอ">
+            <button onclick="openSectionModal()" class="bg-emerald-500 hover:bg-emerald-600 text-white p-2 rounded-lg shadow-sm transition-colors" title="เพิ่มวิดีโอ/ลิงก์">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
             </button>
         </div>
@@ -86,7 +94,7 @@
         <div class="p-5 border-b border-violet-100 bg-violet-50/50 flex justify-between items-center">
             <div class="flex items-center space-x-3">
                 <div class="w-8 h-8 rounded-lg bg-violet-500 text-white flex items-center justify-center font-bold shadow-sm">3</div>
-                <h2 class="text-lg font-bold text-slate-800">ข้อสอบ (เลือกวิดีโอก่อน)</h2>
+                <h2 class="text-lg font-bold text-slate-800">ข้อสอบ (เลือกเนื้อหาก่อน)</h2>
             </div>
             <button onclick="openQuizModal()" class="bg-violet-500 hover:bg-violet-600 text-white p-2 rounded-lg shadow-sm transition-colors" title="เพิ่มข้อสอบ">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
@@ -155,7 +163,7 @@
         </div>
     </div>
 
-    <!-- แท็บ 4: Dashboard (แทนที่ด้วยระบบรายงานผลใหม่) -->
+    <!-- แท็บ 4: Dashboard (รายงานผู้เรียน) -->
     <div id="dashboard-content" class="hidden animate-fade-slide-up flex-grow">
         
         <!-- Header Dashboard -->
@@ -174,7 +182,7 @@
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <div class="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 flex items-center gap-4">
                 <div class="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-500">
-                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
                 </div>
                 <div>
                     <p class="text-sm font-bold text-slate-500">พนักงานทั้งหมด</p>
@@ -218,43 +226,28 @@
             </div>
         </div>
 
-        <!-- 2. กระดานผู้นำ (Leaderboard) -->
+        <!-- 2. กระดานผู้นำ (Top 10 Leaderboard) -->
         <h3 class="text-lg font-bold text-slate-800 mb-4 pl-2 flex items-center gap-2">
-            <span class="text-2xl">🏆</span> Top 3 พนักงานคะแนนสะสมสูงสุด
+            <span class="text-2xl">🏆</span> Top 10 พนักงานคะแนนสะสมสูงสุด
         </h3>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8" id="dashboard-leaderboard">
-            <!-- ข้อมูล Mockup สำหรับรอดู UI (จะถูกแทนที่ด้วย JS) -->
-            <div class="bg-white rounded-3xl shadow-sm border border-slate-100 p-6 flex flex-col items-center leaderboard-card relative overflow-hidden md:mt-6">
-                <div class="w-16 h-16 rounded-full bg-slate-100 border-4 border-slate-200 flex items-center justify-center text-2xl mb-3">🥈</div>
-                <h3 class="font-bold text-lg text-slate-800">กำลังโหลด...</h3>
-                <p class="text-sm text-slate-500 mb-3">-</p>
-                <div class="text-xl font-extrabold text-slate-500">- BN</div>
+        <div id="dashboard-leaderboard">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4" id="dashboard-leaderboard-top3">
+                <div class="bg-white rounded-3xl shadow-sm border border-slate-100 p-6 flex flex-col items-center leaderboard-card relative overflow-hidden md:mt-6"><div class="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-2xl mb-3">🥈</div><h3 class="font-bold text-lg text-slate-800">กำลังโหลด...</h3></div>
+                <div class="bg-white rounded-3xl shadow-md border border-amber-200 p-6 flex flex-col items-center leaderboard-card relative overflow-hidden transform md:-translate-y-4"><div class="w-20 h-20 rounded-full bg-amber-50 flex items-center justify-center text-4xl mb-3">🥇</div><h3 class="font-bold text-xl text-slate-800">กำลังโหลด...</h3></div>
+                <div class="bg-white rounded-3xl shadow-sm border border-slate-100 p-6 flex flex-col items-center leaderboard-card relative overflow-hidden md:mt-6"><div class="w-16 h-16 rounded-full bg-orange-50 flex items-center justify-center text-2xl mb-3">🥉</div><h3 class="font-bold text-lg text-slate-800">กำลังโหลด...</h3></div>
             </div>
-            <div class="bg-white rounded-3xl shadow-md border border-amber-200 p-6 flex flex-col items-center leaderboard-card relative overflow-hidden transform md:-translate-y-4">
-                <div class="w-20 h-20 rounded-full bg-amber-50 border-4 border-amber-300 flex items-center justify-center text-4xl mb-3 relative">🥇</div>
-                <h3 class="font-bold text-xl text-slate-800">กำลังโหลด...</h3>
-                <p class="text-sm text-slate-500 mb-3">-</p>
-                <div class="text-2xl font-black text-amber-500">- BN</div>
-            </div>
-            <div class="bg-white rounded-3xl shadow-sm border border-slate-100 p-6 flex flex-col items-center leaderboard-card relative overflow-hidden md:mt-6">
-                <div class="w-16 h-16 rounded-full bg-orange-50 border-4 border-orange-200 flex items-center justify-center text-2xl mb-3">🥉</div>
-                <h3 class="font-bold text-lg text-slate-800">กำลังโหลด...</h3>
-                <p class="text-sm text-slate-500 mb-3">-</p>
-                <div class="text-xl font-extrabold text-orange-500">- BN</div>
-            </div>
+            <div id="dashboard-leaderboard-others"></div>
         </div>
 
         <!-- 3. ส่วนของตารางข้อมูลและปุ่ม Export -->
-        <div class="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-            <!-- Header ตาราง และกลุ่มปุ่ม Export -->
+        <div class="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col mt-8">
             <div class="p-6 border-b border-slate-100 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                 <div>
                     <h3 class="text-lg font-bold text-slate-800">ข้อมูลพนักงานรายบุคคล</h3>
-                    <p class="text-sm text-slate-500 mt-1">รายละเอียดการเรียนและคะแนนสะสม</p>
+                    <p class="text-sm text-slate-500 mt-1">คลิกที่รายชื่อพนักงานเพื่อดูคอร์สที่เรียนและคะแนนสอบ</p>
                 </div>
                 
                 <div class="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-                    <!-- ช่องค้นหา -->
                     <div class="relative flex-grow lg:flex-grow-0">
                         <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
@@ -262,7 +255,6 @@
                         <input type="text" id="dashboard-search" placeholder="ค้นหาชื่อ, แผนก..." class="w-full lg:w-56 pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#31c1d7] transition-all">
                     </div>
                     
-                    <!-- ปุ่ม Export -->
                     <button onclick="exportDashboardData('csv')" class="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold rounded-xl shadow-sm transition-colors">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                         Export CSV
@@ -270,11 +262,11 @@
                 </div>
             </div>
 
-            <!-- โครงสร้างตาราง -->
             <div class="w-full overflow-x-auto custom-scrollbar">
                 <table class="w-full text-left border-collapse whitespace-nowrap">
                     <thead>
                         <tr class="bg-slate-50/80 text-slate-600 text-sm border-b border-slate-200">
+                            <th class="p-4 font-bold text-center w-16">อันดับ</th>
                             <th class="p-4 font-bold">พนักงาน</th>
                             <th class="p-4 font-bold">แผนก / ตำแหน่ง</th>
                             <th class="p-4 font-bold w-48">ความคืบหน้า (%)</th>
@@ -285,7 +277,7 @@
                     </thead>
                     <tbody id="dashboard-table-body" class="text-sm text-slate-700 divide-y divide-slate-100">
                         <tr>
-                            <td colspan="6" class="p-8 text-center text-slate-500">กำลังโหลดข้อมูล...</td>
+                            <td colspan="7" class="p-8 text-center text-slate-500">กำลังโหลดข้อมูล...</td>
                         </tr>
                     </tbody>
                 </table>
@@ -361,27 +353,40 @@
     </form>
   </div>
 
+  <!-- JAVIS EDITED: Modal จัดการวิดีโอ เพิ่มตัวเลือกประเภทเนื้อหา -->
   <div id="section-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden z-[200] flex justify-center items-center p-4 transition-opacity">
-    <form id="section-form" class="bg-white rounded-3xl w-full max-w-lg shadow-xl overflow-hidden">
+    <form id="section-form" class="bg-white rounded-3xl w-full max-w-xl shadow-xl overflow-hidden">
       <div class="p-6 md:p-8">
-        <h3 id="section-modal-title" class="text-2xl font-extrabold text-slate-800 mb-6">จัดการวิดีโอ</h3>
+        <h3 id="section-modal-title" class="text-2xl font-extrabold text-slate-800 mb-6">จัดการเนื้อหาย่อย</h3>
         <div class="space-y-4">
           <input type="hidden" id="section-id"><input type="hidden" id="section-lesson-id">
           <div><label class="block text-sm font-bold text-slate-700 mb-2">ชื่อตอน / บท</label><input type="text" id="section-title" required class="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none shadow-sm"></div>
-          <div><label class="block text-sm font-bold text-slate-700 mb-2">YouTube Video ID</label><input type="text" id="section-youtube" required class="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-mono shadow-sm"></div>
           
-          <!-- แถวลำดับ และช่องกรอกคะแนน BN -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div class="md:col-span-1">
+                  <label class="block text-sm font-bold text-slate-700 mb-2">รูปแบบ</label>
+                  <select id="section-content-type" onchange="if(typeof updateSectionUrlLabel === 'function') updateSectionUrlLabel()" class="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none shadow-sm font-bold text-emerald-700">
+                      <option value="youtube">▶️ YouTube</option>
+                      <option value="loom">🎥 Loom</option>
+                      <option value="external">🌐 เว็บนอก</option>
+                  </select>
+              </div>
+              <div class="md:col-span-2">
+                  <label class="block text-sm font-bold text-slate-700 mb-2" id="label-section-url">YouTube Video ID (เช่น dQw4w9WgXcQ)</label>
+                  <input type="text" id="section-youtube" required class="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-mono shadow-sm text-sm" placeholder="รหัส หรือ ลิงก์เนื้อหา">
+              </div>
+          </div>
+          
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div><label class="block text-sm font-bold text-slate-700 mb-2">ลำดับการเล่น</label><input type="number" id="section-order" required class="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none shadow-sm"></div>
               <div><label class="block text-sm font-bold text-slate-700 mb-2">คะแนนดูจบ (BN)</label><input type="number" id="section-video-points" required value="10" min="0" class="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#31c1d7] outline-none shadow-sm text-center font-bold text-[#31c1d7]"></div>
               <div><label class="block text-sm font-bold text-slate-700 mb-2">โบนัสสอบผ่าน</label><input type="number" id="section-quiz-points" required value="50" min="0" class="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-violet-500 outline-none shadow-sm text-center font-bold text-violet-500"></div>
           </div>
-
         </div>
       </div>
       <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end space-x-3">
         <button type="button" onclick="closeModals()" class="px-5 py-2.5 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-100">ยกเลิก</button>
-        <button type="submit" id="save-section-btn" class="px-6 py-2.5 bg-emerald-500 text-white font-bold rounded-xl shadow-sm hover:bg-emerald-600">บันทึกวิดีโอ</button>
+        <button type="submit" id="save-section-btn" class="px-6 py-2.5 bg-emerald-500 text-white font-bold rounded-xl shadow-sm hover:bg-emerald-600">บันทึกเนื้อหา</button>
       </div>
     </form>
   </div>
@@ -413,10 +418,16 @@
             </div>
             <div id="dynamic-options-list" class="space-y-3"></div>
           </div>
+          
           <div id="subjective-container" class="bg-blue-50 p-4 sm:p-5 rounded-2xl border border-blue-100 shadow-sm hidden">
-            <label class="block text-sm font-bold text-blue-800 mb-2">เฉลย / คีย์เวิร์ดที่ถูกต้อง</label>
-            <input type="text" id="subjective-answer" placeholder="พิมพ์คีย์เวิร์ดคำตอบ..." class="w-full px-4 py-3 bg-white border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none shadow-sm">
+            <label class="block text-sm font-bold text-blue-800 mb-1">เฉลย / คีย์เวิร์ดที่ถูกต้อง</label>
+            <p class="text-[11px] text-blue-600 mb-2">พิมพ์คีย์เวิร์ดแล้วกด <kbd class="px-1.5 py-0.5 bg-blue-100 border border-blue-200 rounded-md font-mono">Enter</kbd> (ถ้าผู้เรียนพิมพ์คำใดคำหนึ่งตรงกับในนี้ ถือว่าผ่าน)</p>
+            <div class="flex flex-wrap items-center gap-2 w-full p-2 bg-white border border-blue-200 rounded-lg min-h-[46px] focus-within:ring-2 focus-within:ring-blue-500 transition-all cursor-text" onclick="document.getElementById('subjective-answer-input').focus()">
+                <div id="answer-tags-wrapper" class="flex flex-wrap items-center gap-2"></div>
+                <input type="text" id="subjective-answer-input" placeholder="เพิ่มคีย์เวิร์ด..." class="flex-grow bg-transparent border-none outline-none text-sm min-w-[120px] p-1">
+            </div>
           </div>
+          
         </div>
       </div>
       <div class="px-6 py-4 bg-white border-t border-slate-100 flex justify-end space-x-3">
@@ -464,6 +475,30 @@
     </form>
   </div>
 
+  <div id="user-details-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden z-[200] flex justify-center items-center p-4 transition-opacity">
+    <div class="bg-white rounded-3xl w-full max-w-3xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col">
+        <div class="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-white">
+            <h3 class="text-xl sm:text-2xl font-extrabold text-slate-800" id="user-details-title">ประวัติการเรียน</h3>
+            <button type="button" onclick="closeModals()" class="text-slate-400 hover:text-red-500 bg-slate-50 hover:bg-red-50 rounded-full w-8 h-8 flex items-center justify-center font-bold transition-colors">&times;</button>
+        </div>
+        <div class="p-6 overflow-y-auto custom-scrollbar flex-grow bg-slate-50/50" id="user-details-content">
+            <!-- ข้อมูลดึงผ่าน JS -->
+        </div>
+    </div>
+  </div>
+
+  <div id="course-learners-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden z-[200] flex justify-center items-center p-4 transition-opacity">
+    <div class="bg-white rounded-3xl w-full max-w-2xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col">
+        <div class="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-white">
+            <h3 class="text-xl font-extrabold text-slate-800" id="course-learners-title">รายชื่อผู้เรียน</h3>
+            <button type="button" onclick="closeModals()" class="text-slate-400 hover:text-red-500 bg-slate-50 hover:bg-red-50 rounded-full w-8 h-8 flex items-center justify-center font-bold transition-colors">&times;</button>
+        </div>
+        <div class="p-6 overflow-y-auto custom-scrollbar flex-grow bg-slate-50/50" id="course-learners-content">
+            <!-- ข้อมูลดึงผ่าน JS -->
+        </div>
+    </div>
+  </div>
+
   <script>
     function switchAdminTab(tabName) {
         const contents = ['admin-content', 'settings-content', 'dashboard-content', 'users-content'];
@@ -476,11 +511,9 @@
         const activeContent = document.getElementById(tabName === 'manage' ? 'admin-content' : tabName + '-content');
         if(activeContent) activeContent.classList.remove('hidden');
         
-        // กำหนดสีแท็บที่ Active ให้เป็นสี #31c1d7
         const activeTab = document.getElementById('tab-' + tabName);
         if(activeTab) activeTab.className = 'whitespace-nowrap py-2.5 px-6 rounded-xl font-bold text-sm transition-all bg-[#31c1d7]/10 text-[#31c1d7]';
         
-        // ถ้าเป็นแท็บ Dashboard ให้พยายามดึงข้อมูล (ฟังก์ชันนี้เดี๋ยวเราเขียนต่อใน Admin_JS)
         if(tabName === 'dashboard' && typeof loadDashboardData === 'function') {
             loadDashboardData();
         }
