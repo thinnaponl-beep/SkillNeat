@@ -10,12 +10,11 @@ var quizzes = [];
 var masterData = null;
 var users = [];
 
-// ตัวแปรสำหรับเก็บอีเมลของผู้ใช้งานปัจจุบัน เพื่อไว้แสดง "อันดับของคุณ"
+// ตัวแปรสำหรับเก็บอีเมลของผู้ใช้งานปัจจุบัน
 var currentUserEmail = null;
 
 /* วิเคราะห์โครงสร้างข้อมูลที่ส่งมาจาก Backend และแยกตัวแปรให้ถูกต้อง */
 if (adminData.lessons && typeof adminData.lessons === 'object' && !Array.isArray(adminData.lessons)) {
-    // กรณีข้อมูลซ้อนอยู่ใน Object (Legacy Structure)
     var nestedData = adminData.lessons;
     if (nestedData.error) {
         console.error("Permission Denied or Backend Error");
@@ -26,14 +25,13 @@ if (adminData.lessons && typeof adminData.lessons === 'object' && !Array.isArray
         users = nestedData.users || [];
     }
 } else {
-    // กรณีโครงสร้างมาตรฐาน แบบ Flat Object
     lessons = Array.isArray(adminData.lessons) ? adminData.lessons : (Array.isArray(adminData) ? adminData : []);
     quizzes = adminData.allQuizzes || [];
     masterData = adminData.settings || null;
     users = adminData.users || [];
 }
 
-/* ดึงข้อมูล Sections ที่หลังบ้านจัดกลุ่มซ้อนไว้ใน Lessons ออกมาเก็บใน Array หลัก */
+/* ดึงข้อมูล Sections ออกมาเก็บใน Array หลัก */
 var sections = [];
 lessons.forEach(function(lesson) {
     if (lesson.sections && lesson.sections.length > 0) {
@@ -41,7 +39,6 @@ lessons.forEach(function(lesson) {
     }
 });
 
-/* ข้อมูล Master Data (โหลดจากหลังบ้าน ถ้าไม่มีใช้ข้อมูลตั้งต้นจำลอง) */
 if (!masterData || (!masterData.categories && !masterData.departments)) {
     masterData = {
         categories: ['ความรู้ทั่วไป', 'ทักษะวิชาชีพ', 'ความเป็นผู้นำ'],
@@ -52,7 +49,8 @@ if (!masterData || (!masterData.categories && !masterData.departments)) {
 
 var activeLessonId = null;
 var activeSectionId = null;
-var currentEmailTags = []; // <-- เพิ่มตัวแปรสำหรับเก็บรายการ Tag อีเมล
+var currentEmailTags = []; 
+var currentAnswerTags = [];
 
 document.addEventListener('DOMContentLoaded', function() {
     renderSettingsLists(); 
@@ -67,12 +65,10 @@ document.addEventListener('DOMContentLoaded', function() {
     
     setupEventListeners();
 
-    // ดึงข้อมูลอีเมลผู้ใช้ปัจจุบันเพื่อทำ "อันดับของคุณ"
     if (typeof google !== 'undefined' && google.script) {
         google.script.run.withSuccessHandler(function(res) {
             if(res && res.userInfo) {
                 currentUserEmail = res.userInfo.email;
-                // หากหน้า Dashboard ถูกโหลดมาแล้ว ให้รีเรนเดอร์ Leaderboard อีกรอบ
                 if (dashboardDataList && dashboardDataList.length > 0) {
                     const sortedUsers = [...dashboardDataList].sort(function(a, b) { return (b.totalBN || 0) - (a.totalBN || 0); });
                     renderLeaderboard(sortedUsers);
@@ -86,7 +82,6 @@ document.addEventListener('DOMContentLoaded', function() {
    2. ระบบหน้า Settings (เพิ่ม/ลบ Master Data)
 ========================================== */
 function renderSettingsLists() {
-    // 1. หมวดหมู่
     let catHtml = '';
     if (masterData.categories) {
         masterData.categories.forEach(function(item) {
@@ -98,7 +93,6 @@ function renderSettingsLists() {
     }
     document.getElementById('settings-categories-list').innerHTML = catHtml;
 
-    // 2. แผนก
     let deptHtml = '';
     if (masterData.departments) {
         masterData.departments.forEach(function(item) {
@@ -109,7 +103,6 @@ function renderSettingsLists() {
     }
     document.getElementById('settings-departments-list').innerHTML = deptHtml;
 
-    // 3. ตำแหน่ง
     let posHtml = '';
     if (masterData.positions) {
         masterData.positions.forEach(function(item) {
@@ -160,17 +153,19 @@ function deleteMasterDataItem(type, value) {
     }
 }
 
-/* ==========================================
-   ฟังก์ชันสร้างตัวเลือก Checkbox และ Select แบบอัตโนมัติ
-========================================== */
 function renderMasterDataOptions() {
     const catSelect = document.getElementById('lesson-category');
-    if (catSelect && masterData.categories) {
+    const adminFilterSelect = document.getElementById('admin-lesson-category');
+    
+    if (masterData.categories) {
         let catHtml = '<option value="">-- ไม่ระบุหมวดหมู่ --</option>';
+        let filterHtml = '<option value="">ทุกหมวดหมู่</option>';
         masterData.categories.forEach(function(cat) {
             catHtml += '<option value="' + cat + '">' + cat + '</option>';
+            filterHtml += '<option value="' + cat + '">' + cat + '</option>';
         });
-        catSelect.innerHTML = catHtml;
+        if(catSelect) catSelect.innerHTML = catHtml;
+        if(adminFilterSelect) adminFilterSelect.innerHTML = filterHtml; 
     }
 
     const deptContainer = document.getElementById('lesson-departments-container');
@@ -201,9 +196,7 @@ function renderMasterDataOptions() {
     if (userDeptSelect && masterData.departments) {
         let uDeptHtml = '<option value="General">ส่วนกลาง / General</option>';
         masterData.departments.forEach(function(dept) {
-            if (dept !== 'ทั้งหมด (All)') {
-                uDeptHtml += '<option value="' + dept + '">' + dept + '</option>';
-            }
+            if (dept !== 'ทั้งหมด (All)') uDeptHtml += '<option value="' + dept + '">' + dept + '</option>';
         });
         userDeptSelect.innerHTML = uDeptHtml;
     }
@@ -212,17 +205,12 @@ function renderMasterDataOptions() {
     if (userPosSelect && masterData.positions) {
         let uPosHtml = '<option value="พนักงานทั่วไป">พนักงานทั่วไป</option>';
         masterData.positions.forEach(function(pos) {
-            if (pos !== 'ทั้งหมด (All)') {
-                uPosHtml += '<option value="' + pos + '">' + pos + '</option>';
-            }
+            if (pos !== 'ทั้งหมด (All)') uPosHtml += '<option value="' + pos + '">' + pos + '</option>';
         });
         userPosSelect.innerHTML = uPosHtml;
     }
 }
 
-/* ==========================================
-   ระบบแจ้งเตือน (Toast Notification)
-========================================== */
 function showAdminToast(message, type) {
     if (!type) type = 'success';
     const toast = document.createElement('div');
@@ -244,22 +232,6 @@ function showAdminToast(message, type) {
     }, 4000);
 }
 
-function safeReload() {
-    showAdminToast('กำลังอัปเดตข้อมูลใหม่...', 'success');
-    setTimeout(function() {
-        const adminLink = document.querySelector('a[data-page="admin"]');
-        if (adminLink && adminLink.href) {
-            const reloadBtn = document.createElement('a');
-            reloadBtn.href = adminLink.href;
-            reloadBtn.target = '_top';
-            document.body.appendChild(reloadBtn);
-            reloadBtn.click();
-        } else {
-            alert('บันทึกข้อมูลสำเร็จ กรุณากดรีเฟรช (F5)');
-        }
-    }, 500);
-}
-
 /* ==========================================
    3. ระบบจัดการบทเรียน (Lessons)
 ========================================== */
@@ -267,13 +239,24 @@ function renderLessonsList() {
     const container = document.getElementById('admin-lessons-list');
     if (!container) return;
 
-    if (lessons.length === 0) {
-        container.innerHTML = '<div class="text-center p-8 text-slate-400">ยังไม่มีคอร์สเรียนในระบบ</div>';
+    const searchInput = document.getElementById('admin-lesson-search');
+    const catFilter = document.getElementById('admin-lesson-category');
+    const searchKw = searchInput ? searchInput.value.toLowerCase().trim() : '';
+    const filterCat = catFilter ? catFilter.value : '';
+
+    const filteredLessons = lessons.filter(function(lesson) {
+        const matchKw = lesson.Title.toLowerCase().includes(searchKw);
+        const matchCat = filterCat === '' || lesson.Category === filterCat;
+        return matchKw && matchCat;
+    });
+
+    if (filteredLessons.length === 0) {
+        container.innerHTML = '<div class="text-center p-8 text-slate-400">ไม่พบคอร์สที่ค้นหา</div>';
         return;
     }
 
     let html = '';
-    lessons.forEach(function(lesson) {
+    filteredLessons.forEach(function(lesson) {
         const isActiveStr = lesson.IsActive ? '<span class="text-[10px] bg-[#31c1d7]/10 text-[#31c1d7] px-2 py-0.5 rounded font-bold">เผยแพร่แล้ว</span>' : '<span class="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded font-bold">ซ่อน</span>';
         const categoryStr = lesson.Category ? '<span class="text-[10px] border border-[#31c1d7]/30 text-[#31c1d7] px-2 py-0.5 rounded font-bold ml-1.5">' + lesson.Category + '</span>' : '';
         
@@ -295,6 +278,9 @@ function renderLessonsList() {
             '</div>' +
             '</div>' +
             '<div class="flex space-x-1 ml-3 flex-shrink-0">' +
+            '<button onclick="event.stopPropagation(); showCourseLearners(\'' + lesson.LessonID + '\')" class="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors" title="ดูผู้เรียนที่เข้าเรียนคอร์สนี้">' +
+            '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>' +
+            '</button>' +
             '<button onclick="event.stopPropagation(); openLessonModal(\'' + lesson.LessonID + '\')" class="p-1.5 text-[#31c1d7] hover:bg-[#31c1d7]/10 rounded-lg transition-colors" title="แก้ไข">' +
             '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>' +
             '</button>' +
@@ -318,7 +304,6 @@ function selectLesson(lessonId) {
 function openLessonModal(lessonId) {
     const modal = document.getElementById('lesson-modal');
     const form = document.getElementById('lesson-form');
-    
     form.reset();
 
     if (lessonId) {
@@ -329,7 +314,6 @@ function openLessonModal(lessonId) {
         document.getElementById('lesson-is-active').checked = lesson.IsActive;
         if(lesson.Category) document.getElementById('lesson-category').value = lesson.Category;
         
-        // ระบบ Tag อีเมล: ดึงข้อมูลเดิมมาสร้างเป็น Tag
         currentEmailTags = (lesson.TargetEmails || '').split(',').map(function(s) { return s.trim().toLowerCase(); }).filter(Boolean);
         renderEmailTags();
         document.getElementById('lesson-email-input').value = '';
@@ -347,7 +331,6 @@ function openLessonModal(lessonId) {
                 if (positions.includes(box.value)) box.checked = true;
             });
         }
-
         document.getElementById('lesson-modal-title').textContent = 'แก้ไขคอร์สเรียน';
     } else {
         document.getElementById('lesson-id').value = '';
@@ -358,14 +341,12 @@ function openLessonModal(lessonId) {
         const firstPos = document.querySelector('input[name="target-pos"][value="ทั้งหมด (All)"]');
         if(firstPos) firstPos.checked = true;
 
-        // เคลียร์ค่า Tag อีเมลเมื่อเพิ่มคอร์สใหม่
         currentEmailTags = [];
         renderEmailTags();
         document.getElementById('lesson-email-input').value = '';
 
         document.getElementById('lesson-modal-title').textContent = 'เพิ่มคอร์สเรียนใหม่';
     }
-    
     modal.classList.remove('hidden');
 }
 
@@ -388,7 +369,7 @@ function saveLesson(e) {
         IsActive: document.getElementById('lesson-is-active').checked,
         TargetDepartments: selectedDepts.join(', '),
         TargetPositions: selectedPositions.join(', '),
-        TargetEmails: currentEmailTags.join(',') // ดึงข้อมูลจาก Array ของ Tag 
+        TargetEmails: currentEmailTags.join(',')
     };
 
     const isNew = !lessonData.LessonID;
@@ -440,8 +421,25 @@ function deleteLesson(lessonId) {
 }
 
 /* ==========================================
-   4. ระบบจัดการวิดีโอ (Sections) & คะแนน BN
+   4. ระบบจัดการวิดีโอ (Sections)
 ========================================== */
+
+function updateSectionUrlLabel() {
+    const type = document.getElementById('section-content-type').value;
+    const label = document.getElementById('label-section-url');
+    const input = document.getElementById('section-youtube');
+    
+    if (type === 'youtube') {
+        label.textContent = 'YouTube Video ID (เช่น dQw4w9WgXcQ)';
+        input.placeholder = 'รหัส หรือ ลิงก์ YouTube';
+    } else if (type === 'loom') {
+        label.textContent = 'Loom Share URL (เช่น https://www.loom.com/share/...)';
+        input.placeholder = 'เช่น https://www.loom.com/share/6c38f6...';
+    } else if (type === 'external') {
+        label.textContent = 'URL เว็บไซต์ภายนอก';
+        input.placeholder = 'เช่น https://thaimooc.org/...';
+    }
+}
 
 function renderSectionsList() {
     const container = document.getElementById('admin-sections-list');
@@ -464,15 +462,19 @@ function renderSectionsList() {
 
     let html = '<div class="space-y-3">';
     lessonSections.forEach(function(sec) {
-        // --- ดึงคะแนน BN มาแสดง ---
         const vp = sec.VideoPoints !== undefined ? sec.VideoPoints : 10;
         const qp = sec.QuizPoints !== undefined ? sec.QuizPoints : 50;
+
+        let typeBadge = '';
+        if (sec.ContentType === 'loom') typeBadge = '<span class="text-[10px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-bold ml-2 shadow-sm">Loom</span>';
+        else if (sec.ContentType === 'external') typeBadge = '<span class="text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded font-bold ml-2 shadow-sm">External</span>';
+        else typeBadge = '<span class="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold ml-2 shadow-sm">YouTube</span>';
 
         html += '<div class="admin-list-item bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center cursor-pointer hover:border-emerald-300 transition-colors ' + (activeSectionId === sec.SectionID ? 'ring-2 ring-emerald-400 bg-emerald-50/30' : '') + '" onclick="selectSection(\'' + sec.SectionID + '\')">' +
             '<div class="flex items-center flex-grow overflow-hidden">' +
             '<div class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm flex-shrink-0">' + sec.Order + '</div>' +
-            '<div class="ml-3 truncate">' +
-            '<p class="font-bold text-slate-800 text-sm truncate">' + sec.Title + '</p>' +
+            '<div class="ml-3 truncate flex-grow">' +
+            '<p class="font-bold text-slate-800 text-sm truncate">' + sec.Title + typeBadge + '</p>' +
             '<p class="text-[10px] text-slate-500 mt-1 font-medium tracking-wide">ดูจบ: <span class="text-[#31c1d7] font-bold">' + vp + ' BN</span> | สอบผ่าน: <span class="text-[#31c1d7] font-bold">' + qp + ' BN</span></p>' +
             '</div>' +
             '</div>' +
@@ -513,11 +515,12 @@ function openSectionModal(sectionId) {
         document.getElementById('section-youtube').value = sec.YouTubeVideoID;
         document.getElementById('section-order').value = sec.Order;
         
-        // --- ดึงคะแนนเดิมมาใส่ช่อง input ---
         document.getElementById('section-video-points').value = sec.VideoPoints !== undefined ? sec.VideoPoints : 10;
         document.getElementById('section-quiz-points').value = sec.QuizPoints !== undefined ? sec.QuizPoints : 50;
+        
+        document.getElementById('section-content-type').value = sec.ContentType || 'youtube';
 
-        document.getElementById('section-modal-title').textContent = 'แก้ไขวิดีโอ';
+        document.getElementById('section-modal-title').textContent = 'แก้ไขเนื้อหาย่อย';
     } else {
         form.reset();
         document.getElementById('section-id').value = '';
@@ -526,12 +529,15 @@ function openSectionModal(sectionId) {
         const lessonSections = sections.filter(function(s) { return s.LessonID === activeLessonId; });
         document.getElementById('section-order').value = lessonSections.length + 1;
 
-        // --- ตั้งค่าคะแนนเริ่มต้น (10 / 50) ---
         document.getElementById('section-video-points').value = 10;
         document.getElementById('section-quiz-points').value = 50;
+        
+        document.getElementById('section-content-type').value = 'youtube';
 
-        document.getElementById('section-modal-title').textContent = 'เพิ่มวิดีโอใหม่';
+        document.getElementById('section-modal-title').textContent = 'เพิ่มเนื้อหาใหม่';
     }
+    
+    if(typeof updateSectionUrlLabel === 'function') updateSectionUrlLabel();
     
     modal.classList.remove('hidden');
 }
@@ -546,11 +552,11 @@ function saveSection(e) {
         SectionID: document.getElementById('section-id').value,
         LessonID: document.getElementById('section-lesson-id').value,
         Title: document.getElementById('section-title').value,
-        YouTubeVideoID: document.getElementById('section-youtube').value,
+        YouTubeVideoID: document.getElementById('section-youtube').value, 
         Order: document.getElementById('section-order').value,
-        // --- อ่านค่าคะแนนใหม่ที่จะบันทึก ---
         VideoPoints: parseInt(document.getElementById('section-video-points').value) || 0,
-        QuizPoints: parseInt(document.getElementById('section-quiz-points').value) || 0
+        QuizPoints: parseInt(document.getElementById('section-quiz-points').value) || 0,
+        ContentType: document.getElementById('section-content-type').value 
     };
 
     const isNew = !sectionData.SectionID;
@@ -562,15 +568,15 @@ function saveSection(e) {
                 if (isNew) {
                     sectionData.SectionID = response.newId || ('SEC-' + Date.now());
                     sections.push(sectionData);
-                    showAdminToast('เพิ่มวิดีโอใหม่เรียบร้อย');
+                    showAdminToast('เพิ่มเนื้อหาใหม่เรียบร้อย');
                 } else {
                     const idx = sections.findIndex(function(s) { return s.SectionID === sectionData.SectionID; });
                     if (idx > -1) sections[idx] = sectionData;
-                    showAdminToast('บันทึกวิดีโอเรียบร้อย');
+                    showAdminToast('บันทึกการแก้ไขเนื้อหาเรียบร้อย');
                 }
                 renderSectionsList();
                 saveBtn.disabled = false;
-                saveBtn.innerHTML = 'บันทึกวิดีโอ';
+                saveBtn.innerHTML = 'บันทึกเนื้อหา';
             } else {
                 showAdminToast(response.message, 'error');
                 saveBtn.disabled = false;
@@ -581,8 +587,7 @@ function saveSection(e) {
 }
 
 function deleteSection(sectionId) {
-    if(!confirm('ยืนยันการลบวิดีโอนี้?')) return;
-    
+    if(!confirm('ยืนยันการลบเนื้อหานี้?')) return;
     showAdminToast('กำลังลบ...');
     google.script.run
         .withSuccessHandler(function(response) {
@@ -591,7 +596,7 @@ function deleteSection(sectionId) {
                 if(activeSectionId === sectionId) activeSectionId = null;
                 renderSectionsList();
                 renderQuizzesList();
-                showAdminToast('ลบวิดีโอเรียบร้อย');
+                showAdminToast('ลบเนื้อหาเรียบร้อย');
             }
         })
         .deleteSection(sectionId);
@@ -625,11 +630,8 @@ function renderQuizzesList() {
         let typeBadge = '';
         try {
             const opts = JSON.parse(quiz.Options);
-            if (!opts || opts.length === 0) {
-                typeBadge = '<span class="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-bold ml-2">อัตนัย</span>';
-            } else {
-                typeBadge = '<span class="text-[10px] bg-violet-100 text-violet-700 px-2 py-0.5 rounded font-bold ml-2">ปรนัย (' + opts.length + ')</span>';
-            }
+            if (!opts || opts.length === 0) typeBadge = '<span class="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-bold ml-2">อัตนัย</span>';
+            else typeBadge = '<span class="text-[10px] bg-violet-100 text-violet-700 px-2 py-0.5 rounded font-bold ml-2">ปรนัย (' + opts.length + ')</span>';
         } catch(e) {
             typeBadge = '<span class="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-bold ml-2">อัตนัย</span>';
         }
@@ -681,6 +683,34 @@ function addQuizOption(value, isCorrect) {
     container.appendChild(div);
 }
 
+function renderAnswerTags() {
+    const wrapper = document.getElementById('answer-tags-wrapper');
+    if(!wrapper) return;
+    wrapper.innerHTML = '';
+    currentAnswerTags.forEach(function(tag) {
+        const span = document.createElement('span');
+        span.className = 'inline-flex items-center px-2.5 py-1 rounded-md text-sm font-medium bg-blue-100 text-blue-700 border border-blue-200';
+        span.innerHTML = tag + '<button type="button" onclick="removeAnswerTag(\'' + tag + '\')" class="ml-1.5 inline-flex text-blue-500 hover:text-red-500 focus:outline-none"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>';
+        wrapper.appendChild(span);
+    });
+}
+
+function addAnswerTag(tagStr) {
+    const tags = tagStr.split(/[,]+/).map(function(s) { return s.trim(); }).filter(Boolean);
+    tags.forEach(function(tag) {
+        if (!currentAnswerTags.includes(tag)) {
+            currentAnswerTags.push(tag);
+        }
+    });
+    renderAnswerTags();
+    document.getElementById('subjective-answer-input').value = '';
+}
+
+function removeAnswerTag(tag) {
+    currentAnswerTags = currentAnswerTags.filter(function(t) { return t !== tag; });
+    renderAnswerTags();
+}
+
 function openQuizModal(quizId) {
     if (!activeSectionId) {
         alert('กรุณาเลือกวิดีโอก่อนเพิ่มข้อสอบครับ');
@@ -707,9 +737,13 @@ function openQuizModal(quizId) {
 
         if (!options || options.length === 0) {
             document.getElementById('quiz-type').value = 'subjective';
-            document.getElementById('subjective-answer').value = correctAns;
+            currentAnswerTags = correctAns ? correctAns.split(',').map(s => s.trim()).filter(Boolean) : [];
+            renderAnswerTags();
+            document.getElementById('subjective-answer-input').value = '';
         } else {
             document.getElementById('quiz-type').value = 'multiple_choice';
+            currentAnswerTags = [];
+            renderAnswerTags();
             options.forEach(function(opt) {
                 addQuizOption(opt, opt === correctAns);
             });
@@ -721,6 +755,8 @@ function openQuizModal(quizId) {
         document.getElementById('quiz-section-id').value = activeSectionId;
         document.getElementById('quiz-type').value = 'multiple_choice';
         
+        currentAnswerTags = [];
+        renderAnswerTags();
         addQuizOption('', true);
         addQuizOption('', false);
         
@@ -740,9 +776,12 @@ function saveQuiz(e) {
     let finalAnswer = '';
 
     if (type === 'subjective') {
-        finalAnswer = document.getElementById('subjective-answer').value.trim();
+        const leftover = document.getElementById('subjective-answer-input').value.trim();
+        if(leftover) addAnswerTag(leftover);
+        
+        finalAnswer = currentAnswerTags.join(',');
         if (!finalAnswer) {
-            showAdminToast('กรุณาระบุคีย์เวิร์ดคำตอบที่ถูกต้อง', 'error');
+            showAdminToast('กรุณาระบุคีย์เวิร์ดคำตอบที่ถูกต้องอย่างน้อย 1 คำ', 'error');
             return;
         }
     } else {
@@ -952,7 +991,7 @@ function closeModals() {
 }
 
 /* ==========================================
-   ฟังก์ชันจัดการระบบ Tag อีเมล
+   ฟังก์ชันจัดการระบบ Tag อีเมล และ Tag คำตอบอัตนัย
 ========================================== */
 function renderEmailTags() {
     const wrapper = document.getElementById('email-tags-wrapper');
@@ -967,23 +1006,18 @@ function renderEmailTags() {
 }
 
 function addEmailTag(emailStr) {
-    // รองรับการ Copy/Paste หลายอีเมลพร้อมกัน (แยกด้วย , หรือเว้นวรรค)
     const emails = emailStr.split(/[\s,]+/).map(function(s) { return s.trim().toLowerCase(); }).filter(Boolean);
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/; // รูปแบบอีเมลเบื้องต้น
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     
     let hasInvalid = false;
     emails.forEach(function(email) {
         if (!currentEmailTags.includes(email)) {
-            if (emailRegex.test(email)) {
-                currentEmailTags.push(email);
-            } else {
-                hasInvalid = true;
-            }
+            if (emailRegex.test(email)) currentEmailTags.push(email);
+            else hasInvalid = true;
         }
     });
     
     if(hasInvalid) showAdminToast('ข้ามอีเมลรูปแบบไม่ถูกต้อง', 'error');
-    
     renderEmailTags();
     document.getElementById('lesson-email-input').value = '';
 }
@@ -993,7 +1027,6 @@ function removeEmailTag(email) {
     renderEmailTags();
 }
 
-/* Binding Forms */
 function setupEventListeners() {
     const lessonForm = document.getElementById('lesson-form');
     const sectionForm = document.getElementById('section-form');
@@ -1005,26 +1038,34 @@ function setupEventListeners() {
     if(quizForm) quizForm.addEventListener('submit', saveQuiz);
     if(userForm) userForm.addEventListener('submit', saveUser);
     
-    // ตั้งค่า Event ให้อินพุตของ Email Tag
     const emailInput = document.getElementById('lesson-email-input');
     if (emailInput) {
         emailInput.addEventListener('keydown', function(e) {
-            // เมื่อกด Enter, Spacebar หรือ ลูกน้ำ (,)
             if (e.key === 'Enter' || e.key === ' ' || e.key === ',') {
-                e.preventDefault(); // ป้องกันฟอร์ม Submit
+                e.preventDefault();
                 addEmailTag(this.value);
             }
-            // เมื่อกด Backspace และช่องว่างเปล่า ให้ลบ Tag สุดท้ายออก
             if (e.key === 'Backspace' && this.value === '' && currentEmailTags.length > 0) {
                 currentEmailTags.pop();
                 renderEmailTags();
             }
         });
-        
-        // เมื่อคลิกออกไปนอกช่อง (Blur) ถ้ามีข้อความค้างอยู่ให้สร้างเป็น Tag เลย
-        emailInput.addEventListener('blur', function() {
-            addEmailTag(this.value);
+        emailInput.addEventListener('blur', function() { addEmailTag(this.value); });
+    }
+
+    const answerInput = document.getElementById('subjective-answer-input');
+    if (answerInput) {
+        answerInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ',') {
+                e.preventDefault();
+                addAnswerTag(this.value);
+            }
+            if (e.key === 'Backspace' && this.value === '' && currentAnswerTags.length > 0) {
+                currentAnswerTags.pop();
+                renderAnswerTags();
+            }
         });
+        answerInput.addEventListener('blur', function() { addAnswerTag(this.value); });
     }
 }
 
@@ -1045,19 +1086,17 @@ function getRankName(score) {
 function loadDashboardData() {
     const tbody = document.getElementById('dashboard-table-body');
     if (tbody) {
-        tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-slate-500"><svg class="animate-spin h-5 w-5 mx-auto text-[#31c1d7] mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>กำลังรวบรวมข้อมูลจากระบบหลังบ้าน...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-500"><svg class="animate-spin h-5 w-5 mx-auto text-[#31c1d7] mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>กำลังรวบรวมข้อมูลจากระบบหลังบ้าน...</td></tr>';
     }
     
     if (typeof google === 'undefined' || !google.script) {
         showAdminToast("ไม่สามารถเชื่อมต่อกับ Google Apps Script ได้", "error");
-        if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-red-500">ทำงานนอกสภาพแวดล้อม Google Apps Script</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-red-500">ทำงานนอกสภาพแวดล้อม Google Apps Script</td></tr>';
         return;
     }
 
-    // เรียกฟังก์ชัน getDashboardStats ที่คุณเบสร้างไว้ใน Code.gs
     google.script.run
         .withSuccessHandler(function(res) {
-            // ระบบแปลง JSON String ให้กลับเป็น Object เพื่อแก้ปัญหา Google Apps Script ขัดข้องเรื่อง Date Object
             let parsedData = res;
             if (typeof res === 'string') {
                 try { parsedData = JSON.parse(res); } 
@@ -1068,7 +1107,7 @@ function loadDashboardData() {
         .withFailureHandler(function(err) {
             console.error("Dashboard Error:", err);
             showAdminToast("เกิดข้อผิดพลาดในการดึงข้อมูล", "error");
-            if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-red-500">เกิดข้อผิดพลาด: ' + (err.message || err) + '</td></tr>';
+            if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-red-500">เกิดข้อผิดพลาด: ' + (err.message || err) + '</td></tr>';
         })
         .getDashboardStats();
 }
@@ -1076,33 +1115,27 @@ function loadDashboardData() {
 function processDashboardData(data) {
     const tbody = document.getElementById('dashboard-table-body');
 
-    // กรณีเซิร์ฟเวอร์ส่ง Error กลับมา
     if (data && data.error) {
         showAdminToast(data.error, "error");
-        if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-red-500">${data.error}</td></tr>`;
+        if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-red-500">${data.error}</td></tr>`;
         return;
     }
 
-    // กรณีไม่มีข้อมูล หรือ โหลดไม่ได้
     if (!data || !data.students || !Array.isArray(data.students)) {
-        if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-slate-500">ไม่พบข้อมูล หรือโหลดข้อมูลล้มเหลว (โปรดตรวจสอบการแปลง JSON ที่ Code.gs)</td></tr>';
-        
-        // เคลียร์ค่าให้เป็น 0 ป้องกันกล่องข้อมูลค้าง
+        if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-500">ไม่พบข้อมูล หรือโหลดข้อมูลล้มเหลว</td></tr>';
         document.getElementById('dash-total-users').innerHTML = '0 <span class="text-sm font-medium text-slate-400">คน</span>';
         document.getElementById('dash-active-users').innerHTML = '0 <span class="text-sm font-medium text-slate-400">คน</span>';
         document.getElementById('dash-total-courses').innerHTML = '0 <span class="text-sm font-medium text-slate-400">วิชา</span>';
         document.getElementById('dash-avg-progress-text').innerText = '0%';
         document.getElementById('dash-avg-progress-bar').style.width = '0%';
-        
         renderLeaderboard([]);
         return;
     }
 
     dashboardDataList = data.students;
 
-    // 1. ส่วนของการ์ดสรุปผล (Summary Cards)
     const totalUsersCount = data.totalStudents || (users ? users.length : 0);
-    const activeUsersCount = dashboardDataList.length; // จำนวนคนที่มีความคืบหน้าแล้ว
+    const activeUsersCount = dashboardDataList.length;
     const totalLessonsCount = data.totalLessons || 0;
 
     let avgProgress = 0;
@@ -1123,40 +1156,37 @@ function processDashboardData(data) {
     
     document.getElementById('dash-avg-progress-text').innerText = avgProgress + '%';
 
-    // ถ้าไม่มีข้อมูลผู้เรียนที่มีความคืบหน้าให้เคลียร์ตาราง
     if (dashboardDataList.length === 0) {
-        if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-slate-500">ยังไม่มีผู้เรียนที่เริ่มเรียนในระบบ</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-500">ยังไม่มีผู้เรียนที่เริ่มเรียนในระบบ</td></tr>';
         renderLeaderboard([]);
         return;
     }
 
-    // 2. จัดเรียงข้อมูล และแสดงผล
-    // getDashboardStats จาก Code.gs เรียงคะแนนมาให้แล้ว แต่เราเรียงอีกรอบเพื่อความชัวร์
     const sortedUsers = [...dashboardDataList].sort(function(a, b) { return (b.totalBN || 0) - (a.totalBN || 0); });
     
-    // ส่งข้อมูลทุกคนไปที่ renderLeaderboard เพื่อให้ระบบหา Top 5 และหา "อันดับของคุณ"
     renderLeaderboard(sortedUsers);
     renderDashboardTable(sortedUsers);
 }
 
 function renderLeaderboard(sortedUsers) {
-    const container = document.getElementById('dashboard-leaderboard');
+    const top3Container = document.getElementById('dashboard-leaderboard-top3');
+    const othersContainer = document.getElementById('dashboard-leaderboard-others');
     if (!sortedUsers || sortedUsers.length === 0) {
-        container.innerHTML = '<div class="col-span-3 text-center text-slate-500 py-8">ยังไม่มีข้อมูลผู้นำ</div>';
+        top3Container.innerHTML = '<div class="col-span-3 text-center text-slate-500 py-8">ยังไม่มีข้อมูลผู้นำ</div>';
+        othersContainer.innerHTML = '';
         return;
     }
 
-    // ==========================================
-    // ส่วนที่ 1: การสร้าง Top 3 (การ์ดแนวตั้ง)
-    // ==========================================
     const top3 = sortedUsers.slice(0, 3);
+    const others = sortedUsers.slice(3, 10);
+
     const ranks = [
         { data: top3[1], icon: '🥈', color: 'slate',   scoreColor: 'text-slate-500',  border: 'border-slate-100', bg: 'bg-slate-50',     mt: 'md:mt-6', translate: '', shadow: 'shadow-sm' },
         { data: top3[0], icon: '🥇', color: 'amber',   scoreColor: 'text-amber-500',  border: 'border-amber-300', bg: 'bg-amber-50',     mt: '', translate: 'transform md:-translate-y-4', shadow: 'shadow-md border-amber-200' },
         { data: top3[2], icon: '🥉', color: 'orange',  scoreColor: 'text-orange-500', border: 'border-orange-200',bg: 'bg-orange-50',    mt: 'md:mt-6', translate: '', shadow: 'shadow-sm' }
     ];
 
-    let top3Html = '<div class="col-span-1 md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-6">';
+    let top3Html = '';
     ranks.forEach(function(rank, index) {
         if (!rank.data) {
             top3Html += '<div class="bg-white rounded-3xl shadow-sm border border-slate-100 p-6 flex flex-col items-center leaderboard-card relative overflow-hidden ' + rank.mt + '">' +
@@ -1188,93 +1218,47 @@ function renderLeaderboard(sortedUsers) {
             '</div>' +
         '</div>';
     });
-    top3Html += '</div>';
+    top3Container.innerHTML = top3Html;
 
-    // ==========================================
-    // ส่วนที่ 2: การสร้างอันดับ 4 - 5 (แนวนอน)
-    // ==========================================
-    let otherRanksHtml = '<div class="flex flex-col gap-3">';
-    for(let i = 3; i < 5; i++) {
-        if(sortedUsers[i]) {
-            const u = sortedUsers[i];
+    let othersHtml = '<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">';
+    if (others.length > 0) {
+        others.forEach((u, idx) => {
+            const rankNum = idx + 4;
             const rankName = getRankName(u.totalBN);
-            otherRanksHtml += '<div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-3.5 flex items-center justify-between hover:shadow-md transition">' +
-                '<div class="flex items-center gap-4 overflow-hidden">' +
-                    '<div class="w-10 h-10 rounded-full bg-slate-50 border border-slate-100 text-slate-500 font-bold flex flex-shrink-0 items-center justify-center text-lg">' + (i + 1) + '</div>' +
-                    '<div class="truncate">' +
-                        '<h4 class="font-bold text-slate-800 text-sm truncate">' + (u.fullName || u.email || '-') + '</h4>' +
-                        '<p class="text-xs text-slate-500 truncate">' + (u.department || 'General') + '</p>' +
-                    '</div>' +
-                '</div>' +
-                '<div class="text-right flex-shrink-0 pl-2">' +
-                    '<div class="font-black text-slate-700 text-base">' + new Intl.NumberFormat().format(u.totalBN || 0) + ' <span class="text-[10px] text-slate-400 font-medium">BN</span></div>' +
-                    '<div class="text-[10px] text-slate-500 font-medium mt-0.5">' + rankName + '</div>' +
-                '</div>' +
-            '</div>';
-        } else {
-            otherRanksHtml += '<div class="bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 p-3.5 flex items-center justify-center h-[74px]">' +
-                '<span class="text-sm text-slate-400">ยังไม่มีผู้รั้งอันดับ ' + (i + 1) + '</span>' +
-            '</div>';
-        }
-    }
-    otherRanksHtml += '</div>';
-
-    // ==========================================
-    // ส่วนที่ 3: การสร้าง "อันดับของคุณ" (แนวนอน ไฮไลต์สีฟ้า)
-    // ==========================================
-    let myRankHtml = '<div class="flex flex-col gap-3">';
-    if (currentUserEmail) {
-        const myIndex = sortedUsers.findIndex(function(u) { return u.email === currentUserEmail; });
-        if (myIndex !== -1) {
-            const me = sortedUsers[myIndex];
-            const rankName = getRankName(me.totalBN);
-            myRankHtml += '<div class="bg-gradient-to-r from-[#31c1d7]/10 to-[#1eb0c6]/10 rounded-2xl shadow-sm border border-[#31c1d7]/30 p-3.5 flex items-center justify-between ring-1 ring-[#31c1d7]/50">' +
-                '<div class="flex items-center gap-4 overflow-hidden">' +
-                    '<div class="w-10 h-10 rounded-full bg-gradient-to-br from-[#31c1d7] to-[#1eb0c6] text-white font-bold flex flex-shrink-0 items-center justify-center text-lg shadow-sm">' + (myIndex + 1) + '</div>' +
-                    '<div class="truncate">' +
-                        '<h4 class="font-bold text-[#1eb0c6] text-sm truncate">' + (me.fullName || me.email || '-') + ' <span class="text-[10px] bg-[#31c1d7]/20 text-[#1eb0c6] px-1.5 py-0.5 rounded ml-1">คุณ</span></h4>' +
-                        '<p class="text-xs text-[#31c1d7] truncate">' + (me.department || 'General') + '</p>' +
-                    '</div>' +
-                '</div>' +
-                '<div class="text-right flex-shrink-0 pl-2">' +
-                    '<div class="font-black text-[#1eb0c6] text-base">' + new Intl.NumberFormat().format(me.totalBN || 0) + ' <span class="text-[10px] text-[#31c1d7] font-medium">BN</span></div>' +
-                    '<div class="text-[10px] text-[#1eb0c6] font-bold mt-0.5">' + rankName + '</div>' +
-                '</div>' +
-            '</div>';
-        } else {
-            myRankHtml += '<div class="bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 p-3.5 flex items-center justify-center h-[74px]">' +
-                '<span class="text-sm text-slate-400">คุณยังไม่มีข้อมูลการเรียนในระบบ</span>' +
-            '</div>';
-        }
+            const img = u.profileImage || 'https://ui-avatars.com/api/?name='+encodeURIComponent(u.fullName || u.email)+'&background=31c1d7&color=fff';
+            othersHtml += `
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-3.5 flex items-center justify-between hover:shadow-md transition">
+                    <div class="flex items-center gap-3 overflow-hidden">
+                        <div class="w-8 h-8 rounded-full bg-slate-50 border border-slate-100 text-slate-500 font-bold flex flex-shrink-0 items-center justify-center text-sm">${rankNum}</div>
+                        <img src="${img}" class="w-8 h-8 rounded-full object-cover border border-slate-100 hidden sm:block">
+                        <div class="truncate">
+                            <h4 class="font-bold text-slate-800 text-sm truncate">${u.fullName || u.email || '-'}</h4>
+                            <p class="text-xs text-slate-500 truncate">${u.department || 'General'}</p>
+                        </div>
+                    </div>
+                    <div class="text-right flex-shrink-0 pl-2">
+                        <div class="font-black text-slate-700 text-[15px]">${new Intl.NumberFormat().format(u.totalBN || 0)} <span class="text-[9px] text-slate-400 font-medium">BN</span></div>
+                        <div class="text-[9px] text-slate-500 font-medium mt-0.5">${rankName}</div>
+                    </div>
+                </div>`;
+        });
     } else {
-        // กรณีที่อีเมลกำลังโหลดอยู่
-        myRankHtml += '<div class="bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 p-3.5 flex items-center justify-center h-[74px]">' +
-            '<svg class="animate-spin h-4 w-4 mr-2 text-[#31c1d7]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>' +
-            '<span class="text-sm text-slate-400">กำลังค้นหาอันดับของคุณ...</span>' +
-        '</div>';
+        othersHtml += '<div class="col-span-full text-center text-sm text-slate-400 py-4">ยังไม่มีผู้รั้งตำแหน่งเพิ่มเติม</div>';
     }
-    myRankHtml += '</div>';
-
-    // ==========================================
-    // ส่วนที่ 4: รวมทุกส่วนเข้าด้วยกัน
-    // ==========================================
-    let bottomHtml = '<div class="col-span-1 md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">' +
-                     '<div><h4 class="text-sm font-bold text-slate-500 mb-3 pl-1 flex items-center">✨ อันดับ 4 - 5</h4>' + otherRanksHtml + '</div>' +
-                     '<div><h4 class="text-sm font-bold text-[#31c1d7] mb-3 pl-1 flex items-center">🎯 อันดับของคุณ</h4>' + myRankHtml + '</div>' +
-                     '</div>';
-
-    container.innerHTML = top3Html + bottomHtml;
+    othersHtml += '</div>';
+    othersContainer.innerHTML = othersHtml;
 }
 
 function renderDashboardTable(users) {
     const tbody = document.getElementById('dashboard-table-body');
     if (!users || users.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-slate-500">ไม่พบข้อมูลผู้เรียน</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-500">ไม่พบข้อมูลผู้เรียน</td></tr>';
         return;
     }
 
     let html = '';
     users.forEach(function(user) {
+        const globalRank = dashboardDataList.findIndex(u => u.email === user.email) + 1; 
         const progress = user.progressPercent || 0;
         const totalBN = user.totalBN || 0;
         const completedSections = user.completedSections ? user.completedSections.length : 0;
@@ -1288,14 +1272,20 @@ function renderDashboardTable(users) {
         if (progress >= 80) pColor = 'bg-emerald-500';
         else if (progress <= 30) pColor = 'bg-rose-500';
 
-        html += '<tr class="hover:bg-[#31c1d7]/5 transition-colors group">' +
+        let rankBadge = `<span class="inline-flex items-center justify-center w-7 h-7 rounded-full ${globalRank <= 3 ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-500'} font-bold text-xs">${globalRank}</span>`;
+        if(globalRank === 1) rankBadge = `<span class="text-xl drop-shadow-sm" title="อันดับ 1">🥇</span>`;
+        else if(globalRank === 2) rankBadge = `<span class="text-xl drop-shadow-sm" title="อันดับ 2">🥈</span>`;
+        else if(globalRank === 3) rankBadge = `<span class="text-xl drop-shadow-sm" title="อันดับ 3">🥉</span>`;
+
+        html += '<tr class="hover:bg-[#31c1d7]/5 transition-colors group cursor-pointer" onclick="showUserDetails(\'' + email + '\')" title="คลิกเพื่อดูประวัติคอร์สที่เรียน">' +
+            '<td class="p-4 text-center">' + rankBadge + '</td>' +
             '<td class="p-4">' +
                 '<div class="font-bold text-slate-800">' + displayName + '</div>' +
-                '<div class="text-xs text-slate-400">' + email + '</div>' +
+                '<div class="text-[11px] text-slate-400">' + email + '</div>' +
             '</td>' +
             '<td class="p-4">' +
                 '<div class="font-medium text-slate-700">' + dept + '</div>' +
-                '<div class="text-xs text-slate-500">' + pos + '</div>' +
+                '<div class="text-[11px] text-slate-500">' + pos + '</div>' +
             '</td>' +
             '<td class="p-4">' +
                 '<div class="flex items-center gap-2">' +
@@ -1308,7 +1298,7 @@ function renderDashboardTable(users) {
             '<td class="p-4 text-center font-bold text-slate-600">' + completedSections + '</td>' +
             '<td class="p-4 text-center font-black text-[#31c1d7] text-base">' + new Intl.NumberFormat().format(totalBN) + '</td>' +
             '<td class="p-4 text-center">' +
-                '<span class="px-2.5 py-1 bg-white border border-slate-200 text-slate-600 rounded-md text-xs font-bold shadow-sm group-hover:border-[#31c1d7] transition-colors">' +
+                '<span class="px-2.5 py-1 bg-white border border-slate-200 text-slate-600 rounded-md text-[11px] font-bold shadow-sm group-hover:border-[#31c1d7] transition-colors">' +
                     rankName +
                 '</span>' +
             '</td>' +
@@ -1316,6 +1306,148 @@ function renderDashboardTable(users) {
     });
 
     tbody.innerHTML = html;
+}
+
+function showUserDetails(email) {
+    const user = dashboardDataList.find(u => u.email === email);
+    if (!user) return;
+
+    document.getElementById('user-details-title').textContent = `ประวัติการเรียนของ: ${user.fullName || user.email}`;
+    const container = document.getElementById('user-details-content');
+
+    if (!user.completedSections || user.completedSections.length === 0) {
+        container.innerHTML = '<div class="text-center p-8 text-slate-400">ยังไม่เริ่มเรียนคอร์สใดเลย</div>';
+        document.getElementById('user-details-modal').classList.remove('hidden');
+        return;
+    }
+
+    let html = '<div class="space-y-4">';
+    lessons.forEach(lesson => {
+        const lessonSections = sections.filter(s => s.LessonID === lesson.LessonID);
+        if (lessonSections.length === 0) return;
+
+        let completedCount = 0;
+        let totalQuizScore = 0;
+        let totalQuizCount = 0;
+
+        lessonSections.forEach(sec => {
+            if (user.completedSections.includes(sec.SectionID)) {
+                completedCount++;
+            }
+            if (user.scores && user.scores[sec.SectionID] !== undefined) {
+                totalQuizScore += user.scores[sec.SectionID];
+                totalQuizCount++;
+            }
+        });
+
+        if (completedCount > 0) {
+            const progress = Math.round((completedCount / lessonSections.length) * 100);
+            const avgScore = totalQuizCount > 0 ? Math.round((totalQuizScore / totalQuizCount) * 100) : 0;
+            const isCompleted = progress === 100;
+
+            html += `
+            <div class="bg-white p-4 rounded-2xl border ${isCompleted ? 'border-emerald-200 shadow-sm' : 'border-slate-200 hover:border-[#31c1d7]/30'} transition-all">
+                <div class="flex justify-between items-start mb-2">
+                    <h4 class="font-bold text-slate-800 text-sm">${lesson.Title}</h4>
+                    ${isCompleted ? '<span class="px-2 py-1 bg-emerald-100 text-emerald-600 text-[10px] font-bold rounded-lg flex-shrink-0 ml-2">เรียนจบแล้ว</span>' : '<span class="px-2 py-1 bg-[#31c1d7]/10 text-[#31c1d7] text-[10px] font-bold rounded-lg flex-shrink-0 ml-2">กำลังเรียน</span>'}
+                </div>
+                <div class="flex items-center gap-4 text-sm mt-3">
+                    <div class="flex-grow">
+                        <div class="flex justify-between text-[11px] font-bold text-slate-500 mb-1"><span>ความคืบหน้า (${completedCount}/${lessonSections.length} ตอน)</span><span class="${isCompleted ? 'text-emerald-500' : 'text-[#31c1d7]'}">${progress}%</span></div>
+                        <div class="w-full bg-slate-100 rounded-full h-1.5"><div class="${isCompleted ? 'bg-emerald-500' : 'bg-[#31c1d7]'} h-1.5 rounded-full" style="width: ${progress}%"></div></div>
+                    </div>
+                    ${totalQuizCount > 0 ? `<div class="flex-shrink-0 text-center pl-4 border-l border-slate-100"><div class="text-[10px] font-bold text-slate-400">คะแนนสอบ</div><div class="font-black text-violet-600 text-lg">${avgScore}%</div></div>` : ''}
+                </div>
+            </div>`;
+        }
+    });
+    html += '</div>';
+
+    container.innerHTML = html || '<div class="text-center p-8 text-slate-400">ยังไม่เริ่มเรียนคอร์สใดเลย</div>';
+    document.getElementById('user-details-modal').classList.remove('hidden');
+}
+
+function showCourseLearners(lessonId) {
+    const lesson = lessons.find(l => l.LessonID === lessonId);
+    if (!lesson) return;
+
+    document.getElementById('course-learners-title').textContent = `ผู้เข้าเรียน: ${lesson.Title}`;
+    const container = document.getElementById('course-learners-content');
+
+    const lessonSections = sections.filter(s => s.LessonID === lessonId).map(s => s.SectionID);
+    
+    if (!dashboardDataList || dashboardDataList.length === 0) {
+        container.innerHTML = '<div class="text-center p-8 text-slate-400"><svg class="animate-spin h-5 w-5 mx-auto text-[#31c1d7] mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>กำลังดึงข้อมูลส่วนกลาง โปรดรอสักครู่... (หรือลองเข้าไปที่แท็บ "รายงานผู้เรียน" ก่อน)</div>';
+        
+        if (typeof google !== 'undefined' && google.script) {
+            google.script.run.withSuccessHandler(res => {
+                let parsed = res;
+                if(typeof res === 'string') try { parsed = JSON.parse(res); } catch(e){}
+                if(parsed && parsed.students) { dashboardDataList = parsed.students; showCourseLearners(lessonId); }
+            }).getDashboardStats();
+        }
+        document.getElementById('course-learners-modal').classList.remove('hidden');
+        return;
+    }
+
+    if (lessonSections.length === 0) {
+        container.innerHTML = '<div class="text-center p-8 text-slate-400">คอร์สนี้ยังไม่มีการเพิ่มวิดีโอเนื้อหาเลยครับ</div>';
+        document.getElementById('course-learners-modal').classList.remove('hidden');
+        return;
+    }
+
+    const learners = [];
+    dashboardDataList.forEach(user => {
+        let completedCount = 0;
+        lessonSections.forEach(secId => {
+            if (user.completedSections && user.completedSections.includes(secId)) {
+                completedCount++;
+            }
+        });
+        if (completedCount > 0) {
+            learners.push({
+                user: user,
+                progress: Math.round((completedCount / lessonSections.length) * 100)
+            });
+        }
+    });
+
+    learners.sort((a, b) => b.progress - a.progress);
+
+    if (learners.length === 0) {
+        container.innerHTML = '<div class="text-center p-8 text-slate-400">ยังไม่มีพนักงานเริ่มเรียนคอร์สนี้ครับ</div>';
+        document.getElementById('course-learners-modal').classList.remove('hidden');
+        return;
+    }
+
+    let html = '<div class="space-y-3">';
+    learners.forEach(data => {
+        const u = data.user;
+        const isCompleted = data.progress === 100;
+        const img = u.profileImage || 'https://ui-avatars.com/api/?name='+encodeURIComponent(u.fullName || u.email)+'&background=31c1d7&color=fff';
+        
+        html += `
+        <div class="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-shadow">
+            <div class="flex items-center gap-3">
+                <img src="${img}" class="w-10 h-10 rounded-full object-cover border border-slate-200">
+                <div>
+                    <h4 class="text-sm font-bold text-slate-800">${u.fullName || u.email}</h4>
+                    <p class="text-[11px] text-slate-500">${u.department || 'General'}</p>
+                </div>
+            </div>
+            <div class="text-right">
+                <span class="inline-block px-2 py-0.5 ${isCompleted ? 'bg-emerald-100 text-emerald-600' : 'bg-[#31c1d7]/10 text-[#31c1d7]'} text-[10px] font-bold rounded-lg mb-1">${isCompleted ? 'เรียนจบแล้ว' : 'กำลังเรียน'}</span>
+                <div class="flex items-center gap-2 justify-end">
+                    <div class="w-16 bg-slate-100 rounded-full h-1.5"><div class="${isCompleted ? 'bg-emerald-500' : 'bg-[#31c1d7]'} h-1.5 rounded-full" style="width: ${data.progress}%"></div></div>
+                    <div class="text-xs font-black text-slate-700">${data.progress}%</div>
+                </div>
+            </div>
+        </div>`;
+    });
+    html += '</div>';
+
+    container.innerHTML = html;
+    document.getElementById('course-learners-modal').classList.remove('hidden');
 }
 
 document.getElementById('dashboard-search')?.addEventListener('input', function(e) {
@@ -1341,15 +1473,16 @@ function exportDashboardData(format) {
 
     if (format === 'csv') {
         let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; 
-        csvContent += "อีเมลพนักงาน,ชื่อ-นามสกุล,แผนก,ตำแหน่ง,ความคืบหน้า (%),จำนวนตอนที่ดูจบ,คะแนน BN Score,Rank (ยศ)\r\n";
+        csvContent += "อันดับ,อีเมลพนักงาน,ชื่อ-นามสกุล,แผนก,ตำแหน่ง,ความคืบหน้า (%),จำนวนตอนที่ดูจบ,คะแนน BN Score,Rank (ยศ)\r\n";
         
         const exportData = [...dashboardDataList].sort(function(a, b) { return (b.totalBN || 0) - (a.totalBN || 0); });
 
-        exportData.forEach(function(user) {
+        exportData.forEach(function(user, idx) {
+            const globalRank = idx + 1;
             const completedSections = user.completedSections ? user.completedSections.length : 0;
             const rankName = getRankName(user.totalBN);
             
-            csvContent += '"' + (user.email || '') + '","' + (user.fullName || '') + '","' + (user.department || '') + '","' + (user.position || '') + '",' + (user.progressPercent || 0) + ',' + completedSections + ',' + (user.totalBN || 0) + ',"' + rankName + '"\r\n';
+            csvContent += globalRank + ',"' + (user.email || '') + '","' + (user.fullName || '') + '","' + (user.department || '') + '","' + (user.position || '') + '",' + (user.progressPercent || 0) + ',' + completedSections + ',' + (user.totalBN || 0) + ',"' + rankName + '"\r\n';
         });
 
         const encodedUri = encodeURI(csvContent);
