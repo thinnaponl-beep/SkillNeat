@@ -181,6 +181,9 @@ function getStudentData(userEmail) {
         const latestScore = scores.filter(s => s.SectionID === section.SectionID)
                                   .sort((a, b) => new Date(b.Timestamp) - new Date(a.Timestamp))[0];
         section.quizScore = latestScore || null;
+        
+        // JAVIS UPDATE: จัดการ ContentType (ถ้าไม่มีให้มองว่าเป็น youtube)
+        section.ContentType = section.ContentType || 'youtube';
 
         if (progress.includes(section.SectionID)) {
             let vp = parseInt(section.VideoPoints);
@@ -238,9 +241,6 @@ function getStudentData(userEmail) {
   };
 }
 
-// =======================================================
-// [JAVIS ADDED] ฟังก์ชันใหม่สำหรับดึงข้อมูล Leaderboard แบบเบาๆ
-// =======================================================
 function getPublicLeaderboard() {
   const usersProgress = getSheetData(PROGRESS_SHEET_NAME);
   const scores = getSheetData(QUIZ_SCORES_SHEET_NAME);
@@ -298,13 +298,9 @@ function getPublicLeaderboard() {
       }
   });
 
-  // กรองเอาเฉพาะคนที่มีคะแนนมากกว่า 0
   const activeStudents = Object.values(studentMap).filter(std => std.totalBN > 0);
-  
-  // เรียงลำดับคะแนนจากมากไปน้อย
   return activeStudents.sort((a,b) => b.totalBN - a.totalBN);
 }
-// =======================================================
 
 function saveQuizScore(scoreData) {
     const userEmail = Session.getActiveUser().getEmail();
@@ -360,6 +356,33 @@ function recordProgress(sectionId) {
     return { status: 'success' };
   }
   return { status: 'info', message: 'Already recorded.' };
+}
+
+// JAVIS ADDED: ฟังก์ชันอัปโหลดหลักฐานเรียนภายนอก และให้คะแนน
+function submitExternalProof(data) {
+  const userEmail = Session.getActiveUser().getEmail();
+  const safeEmail = userEmail.trim().toLowerCase();
+  if (!userEmail) return { status: 'error', message: 'User not logged in' };
+
+  try {
+    let fileUrl = '';
+    // เซฟรูปภาพลง Google Drive ถ้ามีการแนบไฟล์มา
+    if (data.imageData) {
+      const folderId = "1uYLnZNVG7-Plmf2K_HO0qijLq4l4qwYQ"; // ใช้โฟลเดอร์เดียวกับโปรไฟล์
+      const folder = DriveApp.getFolderById(folderId);
+      folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      const blob = Utilities.newBlob(Utilities.base64Decode(data.imageData), data.imageMimeType, userEmail + "_proof_" + data.sectionId);
+      const file = folder.createFile(blob);
+      fileUrl = file.getUrl();
+    }
+    
+    // อัปเดตความคืบหน้า (เหมือนดูวิดีโอจบ)
+    recordProgress(data.sectionId);
+    
+    return { status: 'success', fileUrl: fileUrl };
+  } catch (e) {
+    return { status: 'error', message: e.toString() };
+  }
 }
 
 function updateUserProfile(data) {
@@ -438,6 +461,7 @@ function getAdminData() {
         lesson.sections = sections.filter(s => s.LessonID === lesson.LessonID).sort((a, b) => a.Order - b.Order);
         lesson.sections.forEach(s => {
             s.questionCount = quizzes.filter(q => q.SectionID === s.SectionID).length;
+            s.ContentType = s.ContentType || 'youtube'; // Default 
         });
     });
 
@@ -579,9 +603,18 @@ function saveSection(data) {
       headers.push('QuizPoints'); 
     }
 
+    // JAVIS UPDATE: สร้างคอลัมน์ ContentType อัตโนมัติถ้าไม่มี
+    let typeCol = headers.indexOf('ContentType');
+    if (typeCol === -1) {
+      typeCol = headers.length;
+      sheet.getRange(1, typeCol + 1).setValue('ContentType');
+      headers.push('ContentType');
+    }
+
     const idCol = headers.indexOf('SectionID');
     const lessonIdCol = headers.indexOf('LessonID');
     const titleCol = headers.indexOf('Title');
+    // ใช้ YouTubeVideoID เดิมเก็บ Data URL ของ Content ไปเลย เพื่อความเข้ากันได้ย้อนหลัง
     const ytCol = headers.indexOf('YouTubeVideoID');
     const orderCol = headers.indexOf('Order');
 
@@ -599,6 +632,7 @@ function saveSection(data) {
         sheet.getRange(rowIndex, orderCol + 1).setValue(data.Order);
         sheet.getRange(rowIndex, vpCol + 1).setValue(data.VideoPoints !== undefined ? data.VideoPoints : 10);
         sheet.getRange(rowIndex, qpCol + 1).setValue(data.QuizPoints !== undefined ? data.QuizPoints : 50);
+        sheet.getRange(rowIndex, typeCol + 1).setValue(data.ContentType || 'youtube');
       } else { 
         return { status: 'error', message: 'Section not found' }; 
       }
@@ -614,6 +648,7 @@ function saveSection(data) {
       newRow[orderCol] = data.Order;
       newRow[vpCol] = data.VideoPoints !== undefined ? data.VideoPoints : 10;
       newRow[qpCol] = data.QuizPoints !== undefined ? data.QuizPoints : 50;
+      newRow[typeCol] = data.ContentType || 'youtube';
       
       sheet.appendRow(newRow);
       return { status: 'success', newId: newId };
@@ -764,12 +799,10 @@ function getDashboardStats() {
   const profiles = getSheetData(USER_PROFILES_SHEET_NAME);
   const lessons = getSheetData(LESSONS_SHEET_NAME).filter(l => l.IsActive);
 
-  // กรองเฉพาะ Section ที่อยู่ในคอร์สที่เปิดใช้งานอยู่
   const activeLessonIds = lessons.map(l => l.LessonID);
   const activeSections = sections.filter(s => activeLessonIds.includes(s.LessonID));
   const totalSections = activeSections.length;
 
-  // ทำแผนที่เก็บคะแนนของแต่ละ Section ไว้เลย จะได้ดึงไปบวกง่ายๆ
   const sectionMap = {};
   activeSections.forEach(s => {
      sectionMap[s.SectionID] = {
@@ -780,7 +813,6 @@ function getDashboardStats() {
 
   const studentMap = {};
 
-  // 1. นำรายชื่อจาก UserProfiles มาสร้างเป็นตารางข้อมูลตั้งต้น
   profiles.forEach(p => {
       const email = String(p.Email).trim().toLowerCase();
       studentMap[email] = {
@@ -797,24 +829,21 @@ function getDashboardStats() {
       };
   });
 
-  // 2. นำประวัติการดูวิดีโอมาใส่และบวกคะแนน VideoPoints
   usersProgress.forEach(p => {
       const email = String(p.Email).trim().toLowerCase();
-      if(!studentMap[email]) { // ถ้าเจอคนที่ไม่ได้ลงทะเบียน Profile ไว้
+      if(!studentMap[email]) {
           studentMap[email] = { email: email, fullName: email, nickname: '-', department: '-', position: '-', profileImage: '', completedSections: [], scores: {}, totalBN: 0, lastActive: null };
       }
       
       if (sectionMap[p.SectionID] && !studentMap[email].completedSections.includes(p.SectionID)) {
           studentMap[email].completedSections.push(p.SectionID);
-          studentMap[email].totalBN += sectionMap[p.SectionID].vp; // บวกแต้มวิดีโอ
+          studentMap[email].totalBN += sectionMap[p.SectionID].vp; 
       }
-      // จำวันที่แอคทีฟล่าสุด
       if (!studentMap[email].lastActive || new Date(p.Timestamp) > new Date(studentMap[email].lastActive)) {
           studentMap[email].lastActive = p.Timestamp;
       }
   });
 
-  // 3. นำประวัติการสอบมาใส่และบวกคะแนนโบนัส QuizPoints
   scores.forEach(s => {
       const email = String(s.Email).trim().toLowerCase();
       if(!studentMap[email]) {
@@ -824,12 +853,12 @@ function getDashboardStats() {
       if (sectionMap[s.SectionID]) {
           const percent = s.TotalQuestions > 0 ? (s.Score / s.TotalQuestions) : 0;
           
-          if (percent >= 0.5) { // ถ้าสอบผ่าน
-             if (!studentMap[email].scores[s.SectionID]) { // ถ้ายังไม่เคยได้โบนัสข้อนี้
+          if (percent >= 0.5) {
+             if (!studentMap[email].scores[s.SectionID]) {
                  studentMap[email].scores[s.SectionID] = percent;
-                 studentMap[email].totalBN += sectionMap[s.SectionID].qp; // บวกแต้มโบนัส
+                 studentMap[email].totalBN += sectionMap[s.SectionID].qp; 
              }
-          } else { // ถ้าสอบตก ก็บันทึกไว้ว่าเคยสอบ
+          } else {
              if (!studentMap[email].scores[s.SectionID]) {
                  studentMap[email].scores[s.SectionID] = percent; 
              }
@@ -841,12 +870,9 @@ function getDashboardStats() {
       }
   });
 
-  // 4. สรุปผลและคำนวณ % ความคืบหน้า
   const students = Object.values(studentMap).map(std => {
-      // คำนวณ % การดูวิดีโอ
       std.progressPercent = totalSections > 0 ? Math.round((std.completedSections.length / totalSections) * 100) : 0;
       
-      // คำนวณ % คะแนนสอบเฉลี่ย
       const scoreValues = Object.values(std.scores);
       if (scoreValues.length > 0) {
           const sumPercent = scoreValues.reduce((sum, val) => sum + (val * 100), 0);
@@ -855,7 +881,6 @@ function getDashboardStats() {
           std.averageScore = 0;
       }
       
-      // จัดรูปแบบวันที่ให้อ่านง่าย
       if (std.lastActive) {
           const d = new Date(std.lastActive);
           std.lastActiveStr = d.toLocaleDateString('th-TH') + ' ' + d.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'});
@@ -864,7 +889,7 @@ function getDashboardStats() {
       }
       
       return std;
-  }).filter(std => std.completedSections.length > 0 || Object.keys(std.scores).length > 0); // กรองเอาเฉพาะคนที่มีประวัติการเรียนโชว์ในตาราง
+  }).filter(std => std.completedSections.length > 0 || Object.keys(std.scores).length > 0); 
 
   return JSON.stringify({
       totalStudents: students.length,
