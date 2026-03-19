@@ -10,10 +10,8 @@ var quizzes = [];
 var masterData = null;
 var users = [];
 
-// ตัวแปรสำหรับเก็บอีเมลของผู้ใช้งานปัจจุบัน
 var currentUserEmail = null;
 
-/* วิเคราะห์โครงสร้างข้อมูลที่ส่งมาจาก Backend และแยกตัวแปรให้ถูกต้อง */
 if (adminData.lessons && typeof adminData.lessons === 'object' && !Array.isArray(adminData.lessons)) {
     var nestedData = adminData.lessons;
     if (nestedData.error) {
@@ -31,7 +29,6 @@ if (adminData.lessons && typeof adminData.lessons === 'object' && !Array.isArray
     users = adminData.users || [];
 }
 
-/* ดึงข้อมูล Sections ออกมาเก็บใน Array หลัก */
 var sections = [];
 lessons.forEach(function(lesson) {
     if (lesson.sections && lesson.sections.length > 0) {
@@ -51,6 +48,16 @@ var activeLessonId = null;
 var activeSectionId = null;
 var currentEmailTags = []; 
 var currentAnswerTags = [];
+
+// JAVIS ADDED: ป้องกัน Error เครื่องหมายคำพูด
+function escapeHtml(unsafe) {
+    return (unsafe || '').toString()
+         .replace(/&/g, "&amp;")
+         .replace(/</g, "&lt;")
+         .replace(/>/g, "&gt;")
+         .replace(/"/g, "&quot;")
+         .replace(/'/g, "&#039;");
+}
 
 document.addEventListener('DOMContentLoaded', function() {
     renderSettingsLists(); 
@@ -86,8 +93,8 @@ function renderSettingsLists() {
     if (masterData.categories) {
         masterData.categories.forEach(function(item) {
             catHtml += '<div class="flex justify-between items-center bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">' +
-                '<span class="text-sm font-medium text-slate-700">' + item + '</span>' +
-                '<button onclick="deleteMasterDataItem(\'categories\', \'' + item + '\')" class="text-red-400 hover:text-red-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>' +
+                '<span class="text-sm font-medium text-slate-700">' + escapeHtml(item) + '</span>' +
+                '<button onclick="deleteMasterDataItem(\'categories\', \'' + escapeHtml(item) + '\')" class="text-red-400 hover:text-red-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>' +
                 '</div>';
         });
     }
@@ -96,9 +103,9 @@ function renderSettingsLists() {
     let deptHtml = '';
     if (masterData.departments) {
         masterData.departments.forEach(function(item) {
-            const deleteBtn = item === 'ทั้งหมด (All)' ? '' : '<button onclick="deleteMasterDataItem(\'departments\', \'' + item + '\')" class="text-red-400 hover:text-red-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>';
+            const deleteBtn = item === 'ทั้งหมด (All)' ? '' : '<button onclick="deleteMasterDataItem(\'departments\', \'' + escapeHtml(item) + '\')" class="text-red-400 hover:text-red-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>';
             deptHtml += '<div class="flex justify-between items-center bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">' +
-                '<span class="text-sm font-medium text-slate-700">' + item + '</span>' + deleteBtn + '</div>';
+                '<span class="text-sm font-medium text-slate-700">' + escapeHtml(item) + '</span>' + deleteBtn + '</div>';
         });
     }
     document.getElementById('settings-departments-list').innerHTML = deptHtml;
@@ -106,9 +113,9 @@ function renderSettingsLists() {
     let posHtml = '';
     if (masterData.positions) {
         masterData.positions.forEach(function(item) {
-            const deleteBtn = item === 'ทั้งหมด (All)' ? '' : '<button onclick="deleteMasterDataItem(\'positions\', \'' + item + '\')" class="text-red-400 hover:text-red-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>';
+            const deleteBtn = item === 'ทั้งหมด (All)' ? '' : '<button onclick="deleteMasterDataItem(\'positions\', \'' + escapeHtml(item) + '\')" class="text-red-400 hover:text-red-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>';
             posHtml += '<div class="flex justify-between items-center bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">' +
-                '<span class="text-sm font-medium text-slate-700">' + item + '</span>' + deleteBtn + '</div>';
+                '<span class="text-sm font-medium text-slate-700">' + escapeHtml(item) + '</span>' + deleteBtn + '</div>';
         });
     }
     document.getElementById('settings-positions-list').innerHTML = posHtml;
@@ -161,8 +168,8 @@ function renderMasterDataOptions() {
         let catHtml = '<option value="">-- ไม่ระบุหมวดหมู่ --</option>';
         let filterHtml = '<option value="">ทุกหมวดหมู่</option>';
         masterData.categories.forEach(function(cat) {
-            catHtml += '<option value="' + cat + '">' + cat + '</option>';
-            filterHtml += '<option value="' + cat + '">' + cat + '</option>';
+            catHtml += '<option value="' + escapeHtml(cat) + '">' + escapeHtml(cat) + '</option>';
+            filterHtml += '<option value="' + escapeHtml(cat) + '">' + escapeHtml(cat) + '</option>';
         });
         if(catSelect) catSelect.innerHTML = catHtml;
         if(adminFilterSelect) adminFilterSelect.innerHTML = filterHtml; 
@@ -173,8 +180,8 @@ function renderMasterDataOptions() {
         let deptHtml = '';
         masterData.departments.forEach(function(dept) {
             deptHtml += '<label class="flex items-center space-x-3 cursor-pointer p-1.5 hover:bg-slate-100 rounded-lg">' +
-                '<input type="checkbox" name="target-dept" value="' + dept + '" class="w-4 h-4 text-[#31c1d7] rounded border-slate-300 focus:ring-[#31c1d7]">' +
-                '<span class="text-sm text-slate-700 font-medium">' + dept + '</span>' +
+                '<input type="checkbox" name="target-dept" value="' + escapeHtml(dept) + '" class="w-4 h-4 text-[#31c1d7] rounded border-slate-300 focus:ring-[#31c1d7]">' +
+                '<span class="text-sm text-slate-700 font-medium">' + escapeHtml(dept) + '</span>' +
                 '</label>';
         });
         deptContainer.innerHTML = deptHtml;
@@ -185,8 +192,8 @@ function renderMasterDataOptions() {
         let posHtml = '';
         masterData.positions.forEach(function(pos) {
             posHtml += '<label class="flex items-center space-x-3 cursor-pointer p-1.5 hover:bg-slate-100 rounded-lg">' +
-                '<input type="checkbox" name="target-pos" value="' + pos + '" class="w-4 h-4 text-[#31c1d7] rounded border-slate-300 focus:ring-[#31c1d7]">' +
-                '<span class="text-sm text-slate-700 font-medium">' + pos + '</span>' +
+                '<input type="checkbox" name="target-pos" value="' + escapeHtml(pos) + '" class="w-4 h-4 text-[#31c1d7] rounded border-slate-300 focus:ring-[#31c1d7]">' +
+                '<span class="text-sm text-slate-700 font-medium">' + escapeHtml(pos) + '</span>' +
                 '</label>';
         });
         posContainer.innerHTML = posHtml;
@@ -196,7 +203,7 @@ function renderMasterDataOptions() {
     if (userDeptSelect && masterData.departments) {
         let uDeptHtml = '<option value="General">ส่วนกลาง / General</option>';
         masterData.departments.forEach(function(dept) {
-            if (dept !== 'ทั้งหมด (All)') uDeptHtml += '<option value="' + dept + '">' + dept + '</option>';
+            if (dept !== 'ทั้งหมด (All)') uDeptHtml += '<option value="' + escapeHtml(dept) + '">' + escapeHtml(dept) + '</option>';
         });
         userDeptSelect.innerHTML = uDeptHtml;
     }
@@ -205,7 +212,7 @@ function renderMasterDataOptions() {
     if (userPosSelect && masterData.positions) {
         let uPosHtml = '<option value="พนักงานทั่วไป">พนักงานทั่วไป</option>';
         masterData.positions.forEach(function(pos) {
-            if (pos !== 'ทั้งหมด (All)') uPosHtml += '<option value="' + pos + '">' + pos + '</option>';
+            if (pos !== 'ทั้งหมด (All)') uPosHtml += '<option value="' + escapeHtml(pos) + '">' + escapeHtml(pos) + '</option>';
         });
         userPosSelect.innerHTML = uPosHtml;
     }
@@ -221,7 +228,7 @@ function showAdminToast(message, type) {
         : '<div class="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center mr-3"><svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"></path></svg></div>';
     
     toast.className = 'fixed top-6 right-6 flex items-center p-4 bg-white border border-slate-100 rounded-2xl shadow-lg z-[9999] transform transition-all duration-300 translate-x-full opacity-0 max-w-sm';
-    toast.innerHTML = icon + '<div><p class="text-sm font-bold text-slate-800">' + message + '</p></div>';
+    toast.innerHTML = icon + '<div><p class="text-sm font-bold text-slate-800">' + escapeHtml(message) + '</p></div>';
     
     document.body.appendChild(toast);
     requestAnimationFrame(function() { toast.classList.remove('translate-x-full', 'opacity-0'); });
@@ -258,7 +265,7 @@ function renderLessonsList() {
     let html = '';
     filteredLessons.forEach(function(lesson) {
         const isActiveStr = lesson.IsActive ? '<span class="text-[10px] bg-[#31c1d7]/10 text-[#31c1d7] px-2 py-0.5 rounded font-bold">เผยแพร่แล้ว</span>' : '<span class="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded font-bold">ซ่อน</span>';
-        const categoryStr = lesson.Category ? '<span class="text-[10px] border border-[#31c1d7]/30 text-[#31c1d7] px-2 py-0.5 rounded font-bold ml-1.5">' + lesson.Category + '</span>' : '';
+        const categoryStr = lesson.Category ? '<span class="text-[10px] border border-[#31c1d7]/30 text-[#31c1d7] px-2 py-0.5 rounded font-bold ml-1.5">' + escapeHtml(lesson.Category) + '</span>' : '';
         
         let targetInfo = '';
         if(lesson.TargetEmails) {
@@ -266,12 +273,12 @@ function renderLessonsList() {
         } else if (lesson.TargetDepartments) {
             let shortDept = lesson.TargetDepartments;
             if(shortDept.length > 25) shortDept = shortDept.substring(0, 25) + '...';
-            targetInfo = '<p class="text-[11px] text-slate-500 mt-1 font-medium truncate">👥 ' + shortDept + '</p>';
+            targetInfo = '<p class="text-[11px] text-slate-500 mt-1 font-medium truncate">👥 ' + escapeHtml(shortDept) + '</p>';
         }
 
         html += '<div class="admin-list-item bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center cursor-pointer hover:border-[#31c1d7]/50 transition-colors ' + (activeLessonId === lesson.LessonID ? 'ring-2 ring-[#31c1d7]/50 bg-[#31c1d7]/5' : '') + '" onclick="selectLesson(\'' + lesson.LessonID + '\')">' +
             '<div class="flex-grow overflow-hidden">' +
-            '<h4 class="font-bold text-slate-800 truncate text-sm">' + lesson.Title + '</h4>' +
+            '<h4 class="font-bold text-slate-800 truncate text-sm">' + escapeHtml(lesson.Title) + '</h4>' +
             targetInfo +
             '<div class="mt-2 flex items-center">' +
             isActiveStr + categoryStr +
@@ -321,14 +328,14 @@ function openLessonModal(lessonId) {
         if (lesson.TargetDepartments) {
             const depts = lesson.TargetDepartments.split(',').map(function(s) { return s.trim(); });
             document.querySelectorAll('input[name="target-dept"]').forEach(function(box) {
-                if (depts.includes(box.value)) box.checked = true;
+                if (depts.indexOf(box.value) !== -1) box.checked = true;
             });
         }
 
         if (lesson.TargetPositions) {
             const positions = lesson.TargetPositions.split(',').map(function(s) { return s.trim(); });
             document.querySelectorAll('input[name="target-pos"]').forEach(function(box) {
-                if (positions.includes(box.value)) box.checked = true;
+                if (positions.indexOf(box.value) !== -1) box.checked = true;
             });
         }
         document.getElementById('lesson-modal-title').textContent = 'แก้ไขคอร์สเรียน';
@@ -432,9 +439,6 @@ function updateSectionUrlLabel() {
     if (type === 'youtube') {
         label.textContent = 'YouTube Video ID (เช่น dQw4w9WgXcQ)';
         input.placeholder = 'รหัส หรือ ลิงก์ YouTube';
-    } else if (type === 'loom') {
-        label.textContent = 'Loom Share URL (เช่น https://www.loom.com/share/...)';
-        input.placeholder = 'เช่น https://www.loom.com/share/6c38f6...';
     } else if (type === 'external') {
         label.textContent = 'URL เว็บไซต์ภายนอก';
         input.placeholder = 'เช่น https://thaimooc.org/...';
@@ -466,15 +470,14 @@ function renderSectionsList() {
         const qp = sec.QuizPoints !== undefined ? sec.QuizPoints : 50;
 
         let typeBadge = '';
-        if (sec.ContentType === 'loom') typeBadge = '<span class="text-[10px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-bold ml-2 shadow-sm">Loom</span>';
-        else if (sec.ContentType === 'external') typeBadge = '<span class="text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded font-bold ml-2 shadow-sm">External</span>';
+        if (sec.ContentType === 'external') typeBadge = '<span class="text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded font-bold ml-2 shadow-sm">External</span>';
         else typeBadge = '<span class="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold ml-2 shadow-sm">YouTube</span>';
 
         html += '<div class="admin-list-item bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center cursor-pointer hover:border-emerald-300 transition-colors ' + (activeSectionId === sec.SectionID ? 'ring-2 ring-emerald-400 bg-emerald-50/30' : '') + '" onclick="selectSection(\'' + sec.SectionID + '\')">' +
             '<div class="flex items-center flex-grow overflow-hidden">' +
             '<div class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm flex-shrink-0">' + sec.Order + '</div>' +
             '<div class="ml-3 truncate flex-grow">' +
-            '<p class="font-bold text-slate-800 text-sm truncate">' + sec.Title + typeBadge + '</p>' +
+            '<p class="font-bold text-slate-800 text-sm truncate">' + escapeHtml(sec.Title) + typeBadge + '</p>' +
             '<p class="text-[10px] text-slate-500 mt-1 font-medium tracking-wide">ดูจบ: <span class="text-[#31c1d7] font-bold">' + vp + ' BN</span> | สอบผ่าน: <span class="text-[#31c1d7] font-bold">' + qp + ' BN</span></p>' +
             '</div>' +
             '</div>' +
@@ -638,7 +641,7 @@ function renderQuizzesList() {
 
         html += '<div class="admin-list-item bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-start hover:border-violet-300 transition-colors">' +
             '<div class="flex-grow pr-3">' +
-            '<p class="font-bold text-sm text-slate-800">' + (idx + 1) + '. ' + questionText + typeBadge + '</p>' +
+            '<p class="font-bold text-sm text-slate-800">' + (idx + 1) + '. ' + escapeHtml(questionText) + typeBadge + '</p>' +
             '</div>' +
             '<div class="flex space-x-1 flex-shrink-0">' +
             '<button onclick="openQuizModal(\'' + quizId + '\')" class="p-1.5 text-violet-600 hover:bg-violet-100 rounded-lg transition-colors" title="แก้ไข">' +
@@ -678,7 +681,7 @@ function addQuizOption(value, isCorrect) {
     const checkedAttr = isCorrect ? 'checked' : '';
     
     div.innerHTML = '<input type="radio" name="correct_option" class="w-5 h-5 text-violet-600 focus:ring-violet-500 cursor-pointer ml-2" ' + checkedAttr + '>' +
-        '<input type="text" class="quiz-option-input flex-grow px-3 py-2 border-none focus:ring-0 outline-none text-sm" value="' + value + '" placeholder="พิมพ์ตัวเลือก...">' +
+        '<input type="text" class="quiz-option-input flex-grow px-3 py-2 border-none focus:ring-0 outline-none text-sm" value="' + escapeHtml(value) + '" placeholder="พิมพ์ตัวเลือก...">' +
         '<button type="button" class="text-slate-400 hover:text-red-500 p-2 mr-1 rounded-lg hover:bg-red-50 transition-colors" onclick="this.parentElement.remove()" title="ลบตัวเลือก"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>';
     container.appendChild(div);
 }
@@ -690,7 +693,7 @@ function renderAnswerTags() {
     currentAnswerTags.forEach(function(tag) {
         const span = document.createElement('span');
         span.className = 'inline-flex items-center px-2.5 py-1 rounded-md text-sm font-medium bg-blue-100 text-blue-700 border border-blue-200';
-        span.innerHTML = tag + '<button type="button" onclick="removeAnswerTag(\'' + tag + '\')" class="ml-1.5 inline-flex text-blue-500 hover:text-red-500 focus:outline-none"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>';
+        span.innerHTML = escapeHtml(tag) + '<button type="button" onclick="removeAnswerTag(\'' + escapeHtml(tag) + '\')" class="ml-1.5 inline-flex text-blue-500 hover:text-red-500 focus:outline-none"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>';
         wrapper.appendChild(span);
     });
 }
@@ -698,7 +701,7 @@ function renderAnswerTags() {
 function addAnswerTag(tagStr) {
     const tags = tagStr.split(/[,]+/).map(function(s) { return s.trim(); }).filter(Boolean);
     tags.forEach(function(tag) {
-        if (!currentAnswerTags.includes(tag)) {
+        if (currentAnswerTags.indexOf(tag) === -1) {
             currentAnswerTags.push(tag);
         }
     });
@@ -737,7 +740,7 @@ function openQuizModal(quizId) {
 
         if (!options || options.length === 0) {
             document.getElementById('quiz-type').value = 'subjective';
-            currentAnswerTags = correctAns ? correctAns.split(',').map(s => s.trim()).filter(Boolean) : [];
+            currentAnswerTags = correctAns ? correctAns.split(',').map(function(s) { return s.trim(); }).filter(Boolean) : [];
             renderAnswerTags();
             document.getElementById('subjective-answer-input').value = '';
         } else {
@@ -897,20 +900,20 @@ function renderUsersList() {
         html += '<tr class="hover:bg-slate-50 transition-colors">' +
             '<td class="py-3 px-4 border-b border-slate-100">' +
                 '<div class="flex items-center space-x-3">' +
-                    '<img src="' + img + '" class="w-10 h-10 rounded-xl object-cover shadow-sm">' +
+                    '<img src="' + escapeHtml(img) + '" class="w-10 h-10 rounded-xl object-cover shadow-sm">' +
                     '<div>' +
-                        '<p class="text-sm font-bold text-slate-800">' + fullName + '</p>' +
-                        '<p class="text-xs text-slate-500">ชื่อเล่น: ' + nickName + '</p>' +
+                        '<p class="text-sm font-bold text-slate-800">' + escapeHtml(fullName) + '</p>' +
+                        '<p class="text-xs text-slate-500">ชื่อเล่น: ' + escapeHtml(nickName) + '</p>' +
                     '</div>' +
                 '</div>' +
             '</td>' +
-            '<td class="py-3 px-4 border-b border-slate-100 text-sm text-slate-600 font-mono">' + u.Email + '</td>' +
+            '<td class="py-3 px-4 border-b border-slate-100 text-sm text-slate-600 font-mono">' + escapeHtml(u.Email) + '</td>' +
             '<td class="py-3 px-4 border-b border-slate-100 text-sm">' +
-                '<span class="px-2.5 py-1 bg-[#31c1d7]/10 text-[#31c1d7] border border-[#31c1d7]/20 rounded-md font-medium text-xs">' + dept + '</span>' +
+                '<span class="px-2.5 py-1 bg-[#31c1d7]/10 text-[#31c1d7] border border-[#31c1d7]/20 rounded-md font-medium text-xs">' + escapeHtml(dept) + '</span>' +
             '</td>' +
-            '<td class="py-3 px-4 border-b border-slate-100 text-sm text-slate-700">' + pos + '</td>' +
+            '<td class="py-3 px-4 border-b border-slate-100 text-sm text-slate-700">' + escapeHtml(pos) + '</td>' +
             '<td class="py-3 px-4 border-b border-slate-100 text-center">' +
-                '<button onclick="openUserModal(\'' + u.Email + '\')" class="text-[#31c1d7] hover:bg-[#31c1d7]/10 border border-transparent hover:border-[#31c1d7]/30 px-3 py-1.5 rounded-lg transition-colors inline-flex items-center text-xs font-bold shadow-sm">' +
+                '<button onclick="openUserModal(\'' + escapeHtml(u.Email) + '\')" class="text-[#31c1d7] hover:bg-[#31c1d7]/10 border border-transparent hover:border-[#31c1d7]/30 px-3 py-1.5 rounded-lg transition-colors inline-flex items-center text-xs font-bold shadow-sm">' +
                     '<svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg> แก้ไข' +
                 '</button>' +
             '</td>' +
@@ -1000,7 +1003,7 @@ function renderEmailTags() {
     currentEmailTags.forEach(function(email) {
         const tag = document.createElement('span');
         tag.className = 'inline-flex items-center px-2.5 py-1 rounded-md text-sm font-medium bg-[#31c1d7]/10 text-[#31c1d7] border border-[#31c1d7]/20';
-        tag.innerHTML = email + '<button type="button" onclick="removeEmailTag(\'' + email + '\')" class="ml-1.5 inline-flex text-[#31c1d7] hover:text-red-500 focus:outline-none"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>';
+        tag.innerHTML = escapeHtml(email) + '<button type="button" onclick="removeEmailTag(\'' + escapeHtml(email) + '\')" class="ml-1.5 inline-flex text-[#31c1d7] hover:text-red-500 focus:outline-none"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>';
         wrapper.appendChild(tag);
     });
 }
@@ -1011,7 +1014,7 @@ function addEmailTag(emailStr) {
     
     let hasInvalid = false;
     emails.forEach(function(email) {
-        if (!currentEmailTags.includes(email)) {
+        if (currentEmailTags.indexOf(email) === -1) {
             if (emailRegex.test(email)) currentEmailTags.push(email);
             else hasInvalid = true;
         }
@@ -1107,7 +1110,7 @@ function loadDashboardData() {
         .withFailureHandler(function(err) {
             console.error("Dashboard Error:", err);
             showAdminToast("เกิดข้อผิดพลาดในการดึงข้อมูล", "error");
-            if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-red-500">เกิดข้อผิดพลาด: ' + (err.message || err) + '</td></tr>';
+            if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-red-500">เกิดข้อผิดพลาด: ' + escapeHtml(err.message || err) + '</td></tr>';
         })
         .getDashboardStats();
 }
@@ -1117,7 +1120,7 @@ function processDashboardData(data) {
 
     if (data && data.error) {
         showAdminToast(data.error, "error");
-        if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-red-500">${data.error}</td></tr>`;
+        if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-red-500">' + escapeHtml(data.error) + '</td></tr>';
         return;
     }
 
@@ -1208,8 +1211,8 @@ function renderLeaderboard(sortedUsers) {
             '<div class="' + sizeClass + ' rounded-full ' + rank.bg + ' border-4 ' + rank.border + ' flex items-center justify-center mb-3 relative">' +
                 rank.icon +
             '</div>' +
-            '<h3 class="font-bold ' + nameClass + ' text-slate-800 text-center truncate w-full" title="' + displayName + '">' + displayName + '</h3>' +
-            '<p class="text-sm text-slate-500 mb-3 text-center">' + displayDept + '</p>' +
+            '<h3 class="font-bold ' + nameClass + ' text-slate-800 text-center truncate w-full" title="' + escapeHtml(displayName) + '">' + escapeHtml(displayName) + '</h3>' +
+            '<p class="text-sm text-slate-500 mb-3 text-center">' + escapeHtml(displayDept) + '</p>' +
             '<div class="' + scoreClass + ' font-black ' + rank.scoreColor + '">' +
                 new Intl.NumberFormat().format(rank.data.totalBN || 0) + ' <span class="text-sm font-medium text-slate-400">BN</span>' +
             '</div>' +
@@ -1222,25 +1225,24 @@ function renderLeaderboard(sortedUsers) {
 
     let othersHtml = '<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">';
     if (others.length > 0) {
-        others.forEach((u, idx) => {
+        others.forEach(function(u, idx) {
             const rankNum = idx + 4;
             const rankName = getRankName(u.totalBN);
             const img = u.profileImage || 'https://ui-avatars.com/api/?name='+encodeURIComponent(u.fullName || u.email)+'&background=31c1d7&color=fff';
-            othersHtml += `
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-3.5 flex items-center justify-between hover:shadow-md transition">
-                    <div class="flex items-center gap-3 overflow-hidden">
-                        <div class="w-8 h-8 rounded-full bg-slate-50 border border-slate-100 text-slate-500 font-bold flex flex-shrink-0 items-center justify-center text-sm">${rankNum}</div>
-                        <img src="${img}" class="w-8 h-8 rounded-full object-cover border border-slate-100 hidden sm:block">
-                        <div class="truncate">
-                            <h4 class="font-bold text-slate-800 text-sm truncate">${u.fullName || u.email || '-'}</h4>
-                            <p class="text-xs text-slate-500 truncate">${u.department || 'General'}</p>
-                        </div>
-                    </div>
-                    <div class="text-right flex-shrink-0 pl-2">
-                        <div class="font-black text-slate-700 text-[15px]">${new Intl.NumberFormat().format(u.totalBN || 0)} <span class="text-[9px] text-slate-400 font-medium">BN</span></div>
-                        <div class="text-[9px] text-slate-500 font-medium mt-0.5">${rankName}</div>
-                    </div>
-                </div>`;
+            othersHtml += '<div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-3.5 flex items-center justify-between hover:shadow-md transition">' +
+                    '<div class="flex items-center gap-3 overflow-hidden">' +
+                        '<div class="w-8 h-8 rounded-full bg-slate-50 border border-slate-100 text-slate-500 font-bold flex flex-shrink-0 items-center justify-center text-sm">' + rankNum + '</div>' +
+                        '<img src="' + escapeHtml(img) + '" class="w-8 h-8 rounded-full object-cover border border-slate-100 hidden sm:block">' +
+                        '<div class="truncate">' +
+                            '<h4 class="font-bold text-slate-800 text-sm truncate">' + escapeHtml(u.fullName || u.email || '-') + '</h4>' +
+                            '<p class="text-xs text-slate-500 truncate">' + escapeHtml(u.department || 'General') + '</p>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="text-right flex-shrink-0 pl-2">' +
+                        '<div class="font-black text-slate-700 text-[15px]">' + new Intl.NumberFormat().format(u.totalBN || 0) + ' <span class="text-[9px] text-slate-400 font-medium">BN</span></div>' +
+                        '<div class="text-[9px] text-slate-500 font-medium mt-0.5">' + rankName + '</div>' +
+                    '</div>' +
+                '</div>';
         });
     } else {
         othersHtml += '<div class="col-span-full text-center text-sm text-slate-400 py-4">ยังไม่มีผู้รั้งตำแหน่งเพิ่มเติม</div>';
@@ -1258,7 +1260,7 @@ function renderDashboardTable(users) {
 
     let html = '';
     users.forEach(function(user) {
-        const globalRank = dashboardDataList.findIndex(u => u.email === user.email) + 1; 
+        const globalRank = dashboardDataList.findIndex(function(u) { return u.email === user.email; }) + 1; 
         const progress = user.progressPercent || 0;
         const totalBN = user.totalBN || 0;
         const completedSections = user.completedSections ? user.completedSections.length : 0;
@@ -1272,20 +1274,20 @@ function renderDashboardTable(users) {
         if (progress >= 80) pColor = 'bg-emerald-500';
         else if (progress <= 30) pColor = 'bg-rose-500';
 
-        let rankBadge = `<span class="inline-flex items-center justify-center w-7 h-7 rounded-full ${globalRank <= 3 ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-500'} font-bold text-xs">${globalRank}</span>`;
-        if(globalRank === 1) rankBadge = `<span class="text-xl drop-shadow-sm" title="อันดับ 1">🥇</span>`;
-        else if(globalRank === 2) rankBadge = `<span class="text-xl drop-shadow-sm" title="อันดับ 2">🥈</span>`;
-        else if(globalRank === 3) rankBadge = `<span class="text-xl drop-shadow-sm" title="อันดับ 3">🥉</span>`;
+        let rankBadge = '<span class="inline-flex items-center justify-center w-7 h-7 rounded-full ' + (globalRank <= 3 ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-500') + ' font-bold text-xs">' + globalRank + '</span>';
+        if(globalRank === 1) rankBadge = '<span class="text-xl drop-shadow-sm" title="อันดับ 1">🥇</span>';
+        else if(globalRank === 2) rankBadge = '<span class="text-xl drop-shadow-sm" title="อันดับ 2">🥈</span>';
+        else if(globalRank === 3) rankBadge = '<span class="text-xl drop-shadow-sm" title="อันดับ 3">🥉</span>';
 
-        html += '<tr class="hover:bg-[#31c1d7]/5 transition-colors group cursor-pointer" onclick="showUserDetails(\'' + email + '\')" title="คลิกเพื่อดูประวัติคอร์สที่เรียน">' +
+        html += '<tr class="hover:bg-[#31c1d7]/5 transition-colors group cursor-pointer" onclick="showUserDetails(\'' + escapeJsString(email) + '\')" title="คลิกเพื่อดูประวัติคอร์สที่เรียน">' +
             '<td class="p-4 text-center">' + rankBadge + '</td>' +
             '<td class="p-4">' +
-                '<div class="font-bold text-slate-800">' + displayName + '</div>' +
-                '<div class="text-[11px] text-slate-400">' + email + '</div>' +
+                '<div class="font-bold text-slate-800">' + escapeHtml(displayName) + '</div>' +
+                '<div class="text-[11px] text-slate-400">' + escapeHtml(email) + '</div>' +
             '</td>' +
             '<td class="p-4">' +
-                '<div class="font-medium text-slate-700">' + dept + '</div>' +
-                '<div class="text-[11px] text-slate-500">' + pos + '</div>' +
+                '<div class="font-medium text-slate-700">' + escapeHtml(dept) + '</div>' +
+                '<div class="text-[11px] text-slate-500">' + escapeHtml(pos) + '</div>' +
             '</td>' +
             '<td class="p-4">' +
                 '<div class="flex items-center gap-2">' +
@@ -1308,57 +1310,91 @@ function renderDashboardTable(users) {
     tbody.innerHTML = html;
 }
 
+// JAVIS UPDATE: ฟังก์ชันเปิดดูประวัติการเรียนรายบุคคล (แสดงหลักฐานเว็บนอกให้กดอนุมัติได้)
 function showUserDetails(email) {
-    const user = dashboardDataList.find(u => u.email === email);
+    const user = dashboardDataList.find(function(u) { return u.email === email; });
     if (!user) return;
 
-    document.getElementById('user-details-title').textContent = `ประวัติการเรียนของ: ${user.fullName || user.email}`;
+    document.getElementById('user-details-title').textContent = 'ประวัติการเรียนของ: ' + (user.fullName || user.email);
     const container = document.getElementById('user-details-content');
 
-    if (!user.completedSections || user.completedSections.length === 0) {
+    if ((!user.completedSections || user.completedSections.length === 0) && (!user.externalProofs || user.externalProofs.length === 0)) {
         container.innerHTML = '<div class="text-center p-8 text-slate-400">ยังไม่เริ่มเรียนคอร์สใดเลย</div>';
         document.getElementById('user-details-modal').classList.remove('hidden');
         return;
     }
 
     let html = '<div class="space-y-4">';
-    lessons.forEach(lesson => {
-        const lessonSections = sections.filter(s => s.LessonID === lesson.LessonID);
+    lessons.forEach(function(lesson) {
+        const lessonSections = sections.filter(function(s) { return s.LessonID === lesson.LessonID; });
         if (lessonSections.length === 0) return;
 
         let completedCount = 0;
         let totalQuizScore = 0;
         let totalQuizCount = 0;
+        let hasActivity = false;
 
-        lessonSections.forEach(sec => {
-            if (user.completedSections.includes(sec.SectionID)) {
-                completedCount++;
-            }
+        let sectionsHtml = '';
+
+        lessonSections.forEach(function(sec) {
+            const isCompleted = user.completedSections.includes(sec.SectionID);
+            if (isCompleted) completedCount++;
+
             if (user.scores && user.scores[sec.SectionID] !== undefined) {
                 totalQuizScore += user.scores[sec.SectionID];
                 totalQuizCount++;
+                hasActivity = true;
+            }
+
+            // จัดการแสดงหลักฐาน (ถ้ามี)
+            if (sec.ContentType === 'external') {
+                const proof = user.externalProofs ? user.externalProofs.find(function(p) { return p.SectionID === sec.SectionID; }) : null;
+                if (proof) {
+                    hasActivity = true;
+                    let statusBadge = '';
+                    let actionBtns = '';
+                    
+                    if (proof.Status === 'Pending') {
+                        statusBadge = '<span class="text-amber-500 bg-amber-50 px-2 py-0.5 rounded text-[10px] font-bold border border-amber-100">⏳ รอตรวจ</span>';
+                        actionBtns = '<button onclick="updateProofStatus(\'' + escapeJsString(email) + '\', \'' + escapeJsString(sec.SectionID) + '\', \'Approved\')" class="px-2 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded text-[10px] font-bold transition">อนุมัติ</button>' +
+                                     '<button onclick="updateProofStatus(\'' + escapeJsString(email) + '\', \'' + escapeJsString(sec.SectionID) + '\', \'Rejected\')" class="px-2 py-1 bg-rose-500 hover:bg-rose-600 text-white rounded text-[10px] font-bold transition">ปฏิเสธ</button>';
+                    } else if (proof.Status === 'Approved') {
+                        statusBadge = '<span class="text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded text-[10px] font-bold border border-emerald-100">✅ อนุมัติแล้ว</span>';
+                    } else {
+                        statusBadge = '<span class="text-rose-600 bg-rose-50 px-2 py-0.5 rounded text-[10px] font-bold border border-rose-100">❌ ไม่อนุมัติ</span>';
+                    }
+                    
+                    sectionsHtml += '<div class="mt-2 p-2 bg-slate-50 border border-slate-100 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2">' +
+                        '<div class="flex items-center gap-2">' +
+                            '<span class="text-xs font-bold text-slate-700">' + escapeHtml(sec.Title) + '</span>' +
+                            '<a href="' + escapeHtml(proof.FileUrl) + '" target="_blank" class="text-blue-500 hover:text-blue-700 hover:underline text-[11px] font-bold flex items-center gap-1">🖼️ ดูรูปหลักฐาน</a>' +
+                            statusBadge +
+                        '</div>' +
+                        '<div class="flex gap-2" id="proof-action-' + sec.SectionID + '">' + actionBtns + '</div>' +
+                    '</div>';
+                }
             }
         });
 
-        if (completedCount > 0) {
+        if (completedCount > 0 || hasActivity) {
             const progress = Math.round((completedCount / lessonSections.length) * 100);
             const avgScore = totalQuizCount > 0 ? Math.round((totalQuizScore / totalQuizCount) * 100) : 0;
-            const isCompleted = progress === 100;
+            const isCourseCompleted = progress === 100;
 
-            html += `
-            <div class="bg-white p-4 rounded-2xl border ${isCompleted ? 'border-emerald-200 shadow-sm' : 'border-slate-200 hover:border-[#31c1d7]/30'} transition-all">
-                <div class="flex justify-between items-start mb-2">
-                    <h4 class="font-bold text-slate-800 text-sm">${lesson.Title}</h4>
-                    ${isCompleted ? '<span class="px-2 py-1 bg-emerald-100 text-emerald-600 text-[10px] font-bold rounded-lg flex-shrink-0 ml-2">เรียนจบแล้ว</span>' : '<span class="px-2 py-1 bg-[#31c1d7]/10 text-[#31c1d7] text-[10px] font-bold rounded-lg flex-shrink-0 ml-2">กำลังเรียน</span>'}
-                </div>
-                <div class="flex items-center gap-4 text-sm mt-3">
-                    <div class="flex-grow">
-                        <div class="flex justify-between text-[11px] font-bold text-slate-500 mb-1"><span>ความคืบหน้า (${completedCount}/${lessonSections.length} ตอน)</span><span class="${isCompleted ? 'text-emerald-500' : 'text-[#31c1d7]'}">${progress}%</span></div>
-                        <div class="w-full bg-slate-100 rounded-full h-1.5"><div class="${isCompleted ? 'bg-emerald-500' : 'bg-[#31c1d7]'} h-1.5 rounded-full" style="width: ${progress}%"></div></div>
-                    </div>
-                    ${totalQuizCount > 0 ? `<div class="flex-shrink-0 text-center pl-4 border-l border-slate-100"><div class="text-[10px] font-bold text-slate-400">คะแนนสอบ</div><div class="font-black text-violet-600 text-lg">${avgScore}%</div></div>` : ''}
-                </div>
-            </div>`;
+            html += '<div class="bg-white p-4 rounded-2xl border ' + (isCourseCompleted ? 'border-emerald-200 shadow-sm' : 'border-slate-200 hover:border-[#31c1d7]/30') + ' transition-all">' +
+                '<div class="flex justify-between items-start mb-2">' +
+                    '<h4 class="font-bold text-slate-800 text-sm">' + escapeHtml(lesson.Title) + '</h4>' +
+                    (isCourseCompleted ? '<span class="px-2 py-1 bg-emerald-100 text-emerald-600 text-[10px] font-bold rounded-lg flex-shrink-0 ml-2">เรียนจบแล้ว</span>' : '<span class="px-2 py-1 bg-[#31c1d7]/10 text-[#31c1d7] text-[10px] font-bold rounded-lg flex-shrink-0 ml-2">กำลังเรียน</span>') +
+                '</div>' +
+                '<div class="flex items-center gap-4 text-sm mt-3">' +
+                    '<div class="flex-grow">' +
+                        '<div class="flex justify-between text-[11px] font-bold text-slate-500 mb-1"><span>ความคืบหน้า (' + completedCount + '/' + lessonSections.length + ' ตอน)</span><span class="' + (isCourseCompleted ? 'text-emerald-500' : 'text-[#31c1d7]') + '">' + progress + '%</span></div>' +
+                        '<div class="w-full bg-slate-100 rounded-full h-1.5"><div class="' + (isCourseCompleted ? 'bg-emerald-500' : 'bg-[#31c1d7]') + ' h-1.5 rounded-full" style="width: ' + progress + '%"></div></div>' +
+                    '</div>' +
+                    (totalQuizCount > 0 ? '<div class="flex-shrink-0 text-center pl-4 border-l border-slate-100"><div class="text-[10px] font-bold text-slate-400">คะแนนสอบ</div><div class="font-black text-violet-600 text-lg">' + avgScore + '%</div></div>' : '') +
+                '</div>' +
+                sectionsHtml +
+            '</div>';
         }
     });
     html += '</div>';
@@ -1367,20 +1403,43 @@ function showUserDetails(email) {
     document.getElementById('user-details-modal').classList.remove('hidden');
 }
 
+// JAVIS ADDED: ฟังก์ชันเรียกใช้งานหลังบ้านเพื่ออัปเดตสถานะรูปรอตรวจสอบ
+function updateProofStatus(email, sectionId, newStatus) {
+    if (!confirm('ยืนยันที่จะ ' + (newStatus === 'Approved' ? 'อนุมัติ' : 'ปฏิเสธ') + ' หลักฐานนี้ใช่หรือไม่?')) return;
+    
+    const container = document.getElementById('proof-action-' + sectionId);
+    if (container) container.innerHTML = '<span class="text-xs text-slate-400">กำลังบันทึก...</span>';
+    
+    google.script.run
+        .withSuccessHandler(function(res) {
+            if (res.status === 'success') {
+                showAdminToast('บันทึกสถานะเรียบร้อยแล้ว');
+                // โหลดข้อมูล Dashboard ใหม่เพื่อให้อัปเดตตารางและเปอร์เซ็นต์
+                loadDashboardData();
+                // ปิด Modal ประวัติการเรียน เพื่อให้แอดมินกดเปิดใหม่ จะได้เห็นข้อมูลอัปเดตล่าสุด
+                document.getElementById('user-details-modal').classList.add('hidden');
+            } else {
+                showAdminToast('เกิดข้อผิดพลาด: ' + res.message, 'error');
+                if (container) container.innerHTML = '<span class="text-xs text-red-500">ล้มเหลว</span>';
+            }
+        })
+        .adminUpdateProofStatus(email, sectionId, newStatus);
+}
+
 function showCourseLearners(lessonId) {
-    const lesson = lessons.find(l => l.LessonID === lessonId);
+    const lesson = lessons.find(function(l) { return l.LessonID === lessonId; });
     if (!lesson) return;
 
-    document.getElementById('course-learners-title').textContent = `ผู้เข้าเรียน: ${lesson.Title}`;
+    document.getElementById('course-learners-title').textContent = 'ผู้เข้าเรียน: ' + lesson.Title;
     const container = document.getElementById('course-learners-content');
 
-    const lessonSections = sections.filter(s => s.LessonID === lessonId).map(s => s.SectionID);
+    const lessonSections = sections.filter(function(s) { return s.LessonID === lessonId; }).map(function(s) { return s.SectionID; });
     
     if (!dashboardDataList || dashboardDataList.length === 0) {
         container.innerHTML = '<div class="text-center p-8 text-slate-400"><svg class="animate-spin h-5 w-5 mx-auto text-[#31c1d7] mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>กำลังดึงข้อมูลส่วนกลาง โปรดรอสักครู่... (หรือลองเข้าไปที่แท็บ "รายงานผู้เรียน" ก่อน)</div>';
         
         if (typeof google !== 'undefined' && google.script) {
-            google.script.run.withSuccessHandler(res => {
+            google.script.run.withSuccessHandler(function(res) {
                 let parsed = res;
                 if(typeof res === 'string') try { parsed = JSON.parse(res); } catch(e){}
                 if(parsed && parsed.students) { dashboardDataList = parsed.students; showCourseLearners(lessonId); }
@@ -1397,9 +1456,9 @@ function showCourseLearners(lessonId) {
     }
 
     const learners = [];
-    dashboardDataList.forEach(user => {
+    dashboardDataList.forEach(function(user) {
         let completedCount = 0;
-        lessonSections.forEach(secId => {
+        lessonSections.forEach(function(secId) {
             if (user.completedSections && user.completedSections.includes(secId)) {
                 completedCount++;
             }
@@ -1412,7 +1471,7 @@ function showCourseLearners(lessonId) {
         }
     });
 
-    learners.sort((a, b) => b.progress - a.progress);
+    learners.sort(function(a, b) { return b.progress - a.progress; });
 
     if (learners.length === 0) {
         container.innerHTML = '<div class="text-center p-8 text-slate-400">ยังไม่มีพนักงานเริ่มเรียนคอร์สนี้ครับ</div>';
@@ -1421,28 +1480,27 @@ function showCourseLearners(lessonId) {
     }
 
     let html = '<div class="space-y-3">';
-    learners.forEach(data => {
+    learners.forEach(function(data) {
         const u = data.user;
         const isCompleted = data.progress === 100;
         const img = u.profileImage || 'https://ui-avatars.com/api/?name='+encodeURIComponent(u.fullName || u.email)+'&background=31c1d7&color=fff';
         
-        html += `
-        <div class="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-shadow">
-            <div class="flex items-center gap-3">
-                <img src="${img}" class="w-10 h-10 rounded-full object-cover border border-slate-200">
-                <div>
-                    <h4 class="text-sm font-bold text-slate-800">${u.fullName || u.email}</h4>
-                    <p class="text-[11px] text-slate-500">${u.department || 'General'}</p>
-                </div>
-            </div>
-            <div class="text-right">
-                <span class="inline-block px-2 py-0.5 ${isCompleted ? 'bg-emerald-100 text-emerald-600' : 'bg-[#31c1d7]/10 text-[#31c1d7]'} text-[10px] font-bold rounded-lg mb-1">${isCompleted ? 'เรียนจบแล้ว' : 'กำลังเรียน'}</span>
-                <div class="flex items-center gap-2 justify-end">
-                    <div class="w-16 bg-slate-100 rounded-full h-1.5"><div class="${isCompleted ? 'bg-emerald-500' : 'bg-[#31c1d7]'} h-1.5 rounded-full" style="width: ${data.progress}%"></div></div>
-                    <div class="text-xs font-black text-slate-700">${data.progress}%</div>
-                </div>
-            </div>
-        </div>`;
+        html += '<div class="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-shadow">' +
+            '<div class="flex items-center gap-3">' +
+                '<img src="' + escapeHtml(img) + '" class="w-10 h-10 rounded-full object-cover border border-slate-200">' +
+                '<div>' +
+                    '<h4 class="text-sm font-bold text-slate-800">' + escapeHtml(u.fullName || u.email) + '</h4>' +
+                    '<p class="text-[11px] text-slate-500">' + escapeHtml(u.department || 'General') + '</p>' +
+                '</div>' +
+            '</div>' +
+            '<div class="text-right">' +
+                '<span class="inline-block px-2 py-0.5 ' + (isCompleted ? 'bg-emerald-100 text-emerald-600' : 'bg-[#31c1d7]/10 text-[#31c1d7]') + ' text-[10px] font-bold rounded-lg mb-1">' + (isCompleted ? 'เรียนจบแล้ว' : 'กำลังเรียน') + '</span>' +
+                '<div class="flex items-center gap-2 justify-end">' +
+                    '<div class="w-16 bg-slate-100 rounded-full h-1.5"><div class="' + (isCompleted ? 'bg-emerald-500' : 'bg-[#31c1d7]') + ' h-1.5 rounded-full" style="width: ' + data.progress + '%"></div></div>' +
+                    '<div class="text-xs font-black text-slate-700">' + data.progress + '%</div>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
     });
     html += '</div>';
 
