@@ -45,9 +45,22 @@ document.addEventListener('DOMContentLoaded', function() {
         
         card.innerHTML = `
             <div class="flex items-center justify-between mb-6">
-                <h3 class="text-lg font-black text-slate-800 flex items-center">
+                <h3 class="text-lg font-black text-slate-800 flex items-center relative group cursor-help">
                     <div class="w-1.5 h-6 bg-[#31c1d7] rounded-full mr-3 shadow-sm shadow-[#31c1d7]/50"></div>
                     ระดับของคุณ (SkillNeat Rank)
+                    
+                    <!-- JAVIS ADDED: ไอคอนข้อมูล (Info Icon) และกล่อง Tooltip -->
+                    <svg class="w-5 h-5 text-slate-400 ml-2 group-hover:text-[#31c1d7] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <div class="absolute top-full left-0 sm:left-full sm:top-1/2 sm:-translate-y-1/2 mt-2 sm:mt-0 sm:ml-4 w-64 p-5 bg-white border border-slate-100 rounded-2xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[100] transform origin-top-left sm:origin-left scale-95 group-hover:scale-100 pointer-events-none">
+                        <h4 class="text-xs font-black text-slate-800 uppercase tracking-widest mb-3 border-b border-slate-100 pb-2">ระบบ Rank ทั้งหมด</h4>
+                        <ul class="space-y-3">
+                            <li class="flex items-center justify-between"><div class="flex items-center gap-2"><span class="text-xl">👑</span><span class="font-bold text-sm text-slate-700">Master</span></div><span class="text-[11px] font-bold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">1,000+ BN</span></li>
+                            <li class="flex items-center justify-between"><div class="flex items-center gap-2"><span class="text-xl">💎</span><span class="font-bold text-sm text-slate-700">Expert</span></div><span class="text-[11px] font-bold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">600+ BN</span></li>
+                            <li class="flex items-center justify-between"><div class="flex items-center gap-2"><span class="text-xl">🥇</span><span class="font-bold text-sm text-slate-700">Scholar</span></div><span class="text-[11px] font-bold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">300+ BN</span></li>
+                            <li class="flex items-center justify-between"><div class="flex items-center gap-2"><span class="text-xl">🥈</span><span class="font-bold text-sm text-slate-700">Explorer</span></div><span class="text-[11px] font-bold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">100+ BN</span></li>
+                            <li class="flex items-center justify-between"><div class="flex items-center gap-2"><span class="text-xl">🥉</span><span class="font-bold text-sm text-slate-700">Novice</span></div><span class="text-[11px] font-bold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">0+ BN</span></li>
+                        </ul>
+                    </div>
                 </h3>
             </div>
             <div class="flex flex-col sm:flex-row items-center sm:items-start space-y-4 sm:space-y-0 sm:space-x-6">
