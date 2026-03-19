@@ -11,6 +11,7 @@ const ADMINS_SHEET_NAME = 'Admins';
 const TIMESTAMPS_SHEET_NAME = 'VideoTimestamps';
 const QUIZ_SCORES_SHEET_NAME = 'QuizScores';
 const USER_PROFILES_SHEET_NAME = 'UserProfiles';
+const EXTERNAL_PROOFS_SHEET_NAME = 'ExternalProofs'; // ชีตเก็บหลักฐาน
 
 // ----------------------------------------------------
 // ระบบ ROUTING (แสดงผลหน้าจอหลัก)
@@ -86,9 +87,11 @@ function getSheetData(sheetName) {
   try {
     const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(sheetName);
     if (!sheet) {
+      if (sheetName === EXTERNAL_PROOFS_SHEET_NAME) return []; 
       throw new Error(`Sheet "${sheetName}" not found.`);
     }
     const rows = sheet.getDataRange().getValues();
+    if (rows.length === 0) return [];
     const headers = rows.shift();
     return rows.map(row => {
       const obj = {};
@@ -115,6 +118,17 @@ function getCurrentUserPermissions(email) {
     };
   }
   return { canEditLessons: false, canEditQuizzes: false, isSuperAdmin: false };
+}
+
+// ฟังก์ชันสร้างชีตเก็บหลักฐานเว็บนอก
+function ensureExternalProofsSheet() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName(EXTERNAL_PROOFS_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(EXTERNAL_PROOFS_SHEET_NAME);
+    sheet.appendRow(['Email', 'SectionID', 'FileUrl', 'Status', 'Timestamp']);
+  }
+  return sheet;
 }
 
 // ----------------------------------------------------
@@ -160,6 +174,9 @@ function getStudentData(userEmail) {
       .filter(s => String(s.Email).trim().toLowerCase() === userEmail);
       
   const allQuizzes = getSheetData(QUIZZES_SHEET_NAME);
+  
+  const externalProofs = getSheetData(EXTERNAL_PROOFS_SHEET_NAME)
+      .filter(p => String(p.Email).trim().toLowerCase() === userEmail);
 
   let userProfile = { Email: userEmail, FullName: '', Nickname: '', Department: 'General', Position: 'พนักงานทั่วไป', ProfileImage: '' };
   const profiles = getSheetData(USER_PROFILES_SHEET_NAME);
@@ -182,8 +199,11 @@ function getStudentData(userEmail) {
                                   .sort((a, b) => new Date(b.Timestamp) - new Date(a.Timestamp))[0];
         section.quizScore = latestScore || null;
         
-        // JAVIS UPDATE: จัดการ ContentType (ถ้าไม่มีให้มองว่าเป็น youtube)
         section.ContentType = section.ContentType || 'youtube';
+
+        const proof = externalProofs.filter(p => p.SectionID === section.SectionID)
+                                    .sort((a,b) => new Date(b.Timestamp) - new Date(a.Timestamp))[0];
+        section.externalProof = proof || null;
 
         if (progress.includes(section.SectionID)) {
             let vp = parseInt(section.VideoPoints);
@@ -197,7 +217,11 @@ function getStudentData(userEmail) {
         return section;
       });
     
-    lesson.isCompleted = lesson.sections.length > 0 && lesson.sections.every(s => progress.includes(s.SectionID));
+    lesson.isCompleted = lesson.sections.length > 0 && lesson.sections.every(s => {
+        const isVideoDone = progress.includes(s.SectionID);
+        const isQuizDone = !s.hasQuiz || (s.quizScore && (s.quizScore.Score / s.quizScore.TotalQuestions) >= 0.5);
+        return isVideoDone && isQuizDone;
+    });
   });
 
   const userDept = userProfile.Department ? userProfile.Department.toString().trim() : '';
@@ -358,7 +382,31 @@ function recordProgress(sectionId) {
   return { status: 'info', message: 'Already recorded.' };
 }
 
-// JAVIS ADDED: ฟังก์ชันอัปโหลดหลักฐานเรียนภายนอก และให้คะแนน
+function recordProgressAdmin(email, sectionId) {
+  const progressSheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(PROGRESS_SHEET_NAME);
+  const data = progressSheet.getDataRange().getValues();
+  const alreadyExists = data.some(row => String(row[0]).trim().toLowerCase() === email && row[1] === sectionId);
+  
+  if (!alreadyExists) {
+    progressSheet.appendRow([email, sectionId, new Date()]);
+    return { status: 'success' };
+  }
+  return { status: 'info', message: 'Already recorded.' };
+}
+
+function removeProgressAdmin(email, sectionId) {
+  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(PROGRESS_SHEET_NAME);
+  const data = sheet.getDataRange().getValues();
+  for (let i = data.length - 1; i > 0; i--) {
+      if (String(data[i][0]).trim().toLowerCase() === email && data[i][1] === sectionId) {
+          sheet.deleteRow(i + 1);
+      }
+  }
+}
+
+// ----------------------------------------------------
+// ระบบรับไฟล์รูปภาพและการอนุมัติ
+// ----------------------------------------------------
 function submitExternalProof(data) {
   const userEmail = Session.getActiveUser().getEmail();
   const safeEmail = userEmail.trim().toLowerCase();
@@ -366,9 +414,8 @@ function submitExternalProof(data) {
 
   try {
     let fileUrl = '';
-    // เซฟรูปภาพลง Google Drive ถ้ามีการแนบไฟล์มา
     if (data.imageData) {
-      const folderId = "1uYLnZNVG7-Plmf2K_HO0qijLq4l4qwYQ"; // ใช้โฟลเดอร์เดียวกับโปรไฟล์
+      const folderId = "1uYLnZNVG7-Plmf2K_HO0qijLq4l4qwYQ"; 
       const folder = DriveApp.getFolderById(folderId);
       folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
       const blob = Utilities.newBlob(Utilities.base64Decode(data.imageData), data.imageMimeType, userEmail + "_proof_" + data.sectionId);
@@ -376,12 +423,55 @@ function submitExternalProof(data) {
       fileUrl = file.getUrl();
     }
     
-    // อัปเดตความคืบหน้า (เหมือนดูวิดีโอจบ)
-    recordProgress(data.sectionId);
+    let sheet = ensureExternalProofsSheet();
+    let dataRange = sheet.getDataRange().getValues();
+    let foundIndex = -1;
+    
+    for(let i = 1; i < dataRange.length; i++) {
+        if(String(dataRange[i][0]).trim().toLowerCase() === safeEmail && dataRange[i][1] === data.sectionId) {
+            foundIndex = i + 1; 
+            break;
+        }
+    }
+    
+    if (foundIndex > -1) {
+        sheet.getRange(foundIndex, 3).setValue(fileUrl);
+        sheet.getRange(foundIndex, 4).setValue('Pending');
+        sheet.getRange(foundIndex, 5).setValue(new Date());
+    } else {
+        sheet.appendRow([safeEmail, data.sectionId, fileUrl, 'Pending', new Date()]);
+    }
     
     return { status: 'success', fileUrl: fileUrl };
   } catch (e) {
     return { status: 'error', message: e.toString() };
+  }
+}
+
+function adminUpdateProofStatus(email, sectionId, status) {
+  const permissions = getCurrentUserPermissions(Session.getActiveUser().getEmail());
+  if (!permissions.canEditLessons && !permissions.isSuperAdmin) return { status: 'error', message: 'Permission Denied' };
+  
+  try {
+      let sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(EXTERNAL_PROOFS_SHEET_NAME);
+      if(!sheet) return {status: 'error', message:'Sheet not found'};
+      
+      let data = sheet.getDataRange().getValues();
+      for(let i = 1; i < data.length; i++) {
+          if(String(data[i][0]).trim().toLowerCase() === String(email).trim().toLowerCase() && data[i][1] === sectionId) {
+              sheet.getRange(i+1, 4).setValue(status);
+              
+              if (status === 'Approved') {
+                  recordProgressAdmin(email, sectionId);
+              } else if (status === 'Rejected') {
+                  removeProgressAdmin(email, sectionId);
+              }
+              return {status: 'success'};
+          }
+      }
+      return {status: 'error', message: 'ไม่พบประวัติการส่งหลักฐาน'};
+  } catch (e) {
+      return {status: 'error', message: e.toString()};
   }
 }
 
@@ -461,7 +551,6 @@ function getAdminData() {
         lesson.sections = sections.filter(s => s.LessonID === lesson.LessonID).sort((a, b) => a.Order - b.Order);
         lesson.sections.forEach(s => {
             s.questionCount = quizzes.filter(q => q.SectionID === s.SectionID).length;
-            s.ContentType = s.ContentType || 'youtube'; // Default 
         });
     });
 
@@ -603,7 +692,6 @@ function saveSection(data) {
       headers.push('QuizPoints'); 
     }
 
-    // JAVIS UPDATE: สร้างคอลัมน์ ContentType อัตโนมัติถ้าไม่มี
     let typeCol = headers.indexOf('ContentType');
     if (typeCol === -1) {
       typeCol = headers.length;
@@ -614,7 +702,6 @@ function saveSection(data) {
     const idCol = headers.indexOf('SectionID');
     const lessonIdCol = headers.indexOf('LessonID');
     const titleCol = headers.indexOf('Title');
-    // ใช้ YouTubeVideoID เดิมเก็บ Data URL ของ Content ไปเลย เพื่อความเข้ากันได้ย้อนหลัง
     const ytCol = headers.indexOf('YouTubeVideoID');
     const orderCol = headers.indexOf('Order');
 
@@ -749,9 +836,6 @@ function saveUserAdmin(userData) {
   }
 }
 
-// ----------------------------------------------------
-// ระบบ SUPER ADMIN (จัดการสิทธิ์ และ ดูสถิติ)
-// ----------------------------------------------------
 function getAdmins() {
   const permissions = getCurrentUserPermissions(Session.getActiveUser().getEmail());
   if (!permissions.isSuperAdmin) return { error: 'Permission Denied' };
@@ -786,9 +870,6 @@ function updateAdminPermissions(email, newPermissions) {
   }
 }
 
-// ==============================================================
-// 📊 ฟังก์ชันใหม่: ดึงสถิติ Dashboard และ Leaderboard ฉบับสมบูรณ์
-// ==============================================================
 function getDashboardStats() {
   const permissions = getCurrentUserPermissions(Session.getActiveUser().getEmail());
   if (!permissions.canEditLessons && !permissions.canEditQuizzes && !permissions.isSuperAdmin) return { error: 'Permission Denied' };
@@ -798,6 +879,7 @@ function getDashboardStats() {
   const sections = getSheetData(SECTIONS_SHEET_NAME);
   const profiles = getSheetData(USER_PROFILES_SHEET_NAME);
   const lessons = getSheetData(LESSONS_SHEET_NAME).filter(l => l.IsActive);
+  const externalProofs = getSheetData(EXTERNAL_PROOFS_SHEET_NAME);
 
   const activeLessonIds = lessons.map(l => l.LessonID);
   const activeSections = sections.filter(s => activeLessonIds.includes(s.LessonID));
@@ -825,14 +907,15 @@ function getDashboardStats() {
           completedSections: [],
           scores: {},
           totalBN: 0,
-          lastActive: null
+          lastActive: null,
+          externalProofs: externalProofs.filter(proof => String(proof.Email).trim().toLowerCase() === email)
       };
   });
 
   usersProgress.forEach(p => {
       const email = String(p.Email).trim().toLowerCase();
       if(!studentMap[email]) {
-          studentMap[email] = { email: email, fullName: email, nickname: '-', department: '-', position: '-', profileImage: '', completedSections: [], scores: {}, totalBN: 0, lastActive: null };
+          studentMap[email] = { email: email, fullName: email, nickname: '-', department: '-', position: '-', profileImage: '', completedSections: [], scores: {}, totalBN: 0, lastActive: null, externalProofs: externalProofs.filter(proof => String(proof.Email).trim().toLowerCase() === email) };
       }
       
       if (sectionMap[p.SectionID] && !studentMap[email].completedSections.includes(p.SectionID)) {
@@ -847,7 +930,7 @@ function getDashboardStats() {
   scores.forEach(s => {
       const email = String(s.Email).trim().toLowerCase();
       if(!studentMap[email]) {
-          studentMap[email] = { email: email, fullName: email, nickname: '-', department: '-', position: '-', profileImage: '', completedSections: [], scores: {}, totalBN: 0, lastActive: null };
+          studentMap[email] = { email: email, fullName: email, nickname: '-', department: '-', position: '-', profileImage: '', completedSections: [], scores: {}, totalBN: 0, lastActive: null, externalProofs: externalProofs.filter(proof => String(proof.Email).trim().toLowerCase() === email) };
       }
       
       if (sectionMap[s.SectionID]) {
@@ -889,7 +972,7 @@ function getDashboardStats() {
       }
       
       return std;
-  }).filter(std => std.completedSections.length > 0 || Object.keys(std.scores).length > 0); 
+  }).filter(std => std.completedSections.length > 0 || Object.keys(std.scores).length > 0 || std.externalProofs.length > 0); 
 
   return JSON.stringify({
       totalStudents: students.length,
