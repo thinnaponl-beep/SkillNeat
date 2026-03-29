@@ -1,0 +1,565 @@
+<script>
+/* ============================================================================
+   [ส่วนที่ 7] ระบบรายงานผลและสถิติ (Dashboard & Leaderboard)
+============================================================================ */
+
+let dashboardDataList = []; 
+let currentAdminDashView = 'all'; 
+
+function getRankName(score) {
+    const numScore = parseInt(score) || 0;
+    if (numScore >= 1000) return 'Master (ปรมาจารย์)';
+    if (numScore >= 600) return 'Expert (ผู้เชี่ยวชาญ)';
+    if (numScore >= 300) return 'Scholar (ผู้ใฝ่รู้)';
+    if (numScore >= 100) return 'Explorer (นักสำรวจ)';
+    return 'Novice (ผู้เริ่มต้น)';
+}
+
+function loadDashboardData() {
+    const tbody = document.getElementById('dashboard-table-body');
+    const selector = document.getElementById('dashboard-period-filter');
+    // ดึงค่าเดือนที่เลือก ถ้าไม่มีให้ใช้ 'all'
+    currentAdminDashView = selector ? selector.value : 'all';
+
+    // อัปเดต Title ให้ตรงกับเดือนที่เลือก
+    const titleH3 = document.getElementById('dashboard-leaderboard-title');
+    if (titleH3 && selector && selector.selectedIndex > -1) {
+        const labelText = selector.options[selector.selectedIndex].text;
+        titleH3.innerHTML = '<span class="text-2xl">🏆</span> Top 10 พนักงานคะแนนสะสมสูงสุด (' + labelText + ')';
+    }
+
+    if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-500"><svg class="animate-spin h-5 w-5 mx-auto text-[#31c1d7] mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>กำลังรวบรวมข้อมูล...</td></tr>';
+    }
+    
+    const lbContainer = document.getElementById('dashboard-leaderboard-top3');
+    if (lbContainer) lbContainer.innerHTML = '<div class="col-span-3 text-center text-slate-500 py-8"><svg class="animate-spin h-5 w-5 mx-auto text-[#31c1d7] mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>กำลังโหลดข้อมูลผู้นำ...</div>';
+    const lbOthers = document.getElementById('dashboard-leaderboard-others');
+    if (lbOthers) lbOthers.innerHTML = '';
+
+    if (typeof google === 'undefined' || !google.script) {
+        if(typeof showAdminToast === 'function') showAdminToast("ไม่สามารถเชื่อมต่อกับ Google Apps Script ได้", "error");
+        if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-red-500">ทำงานนอกสภาพแวดล้อม Google Apps Script</td></tr>';
+        return;
+    }
+
+    google.script.run
+        .withSuccessHandler(function(res) {
+            let parsedData = res;
+            if (typeof res === 'string') {
+                try { parsedData = JSON.parse(res); } 
+                catch(e) { console.error("JSON Parse Error:", e); }
+            }
+            processDashboardData(parsedData);
+        })
+        .withFailureHandler(function(err) {
+            console.error("Dashboard Error:", err);
+            if(typeof showAdminToast === 'function') showAdminToast("เกิดข้อผิดพลาดในการดึงข้อมูลจาก Code.gs", "error");
+            if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-red-500">เกิดข้อผิดพลาด: ' + escapeHtml(err.message || err) + '<br><span class="text-xs text-slate-500">โปรดตรวจสอบว่าได้อัปเดตไฟล์ Code.gs ครบถ้วนแล้ว (ตรวจสอบฟังก์ชัน getDashboardStats และ isDateInPeriod)</span></td></tr>';
+            if (lbContainer) lbContainer.innerHTML = '<div class="col-span-3 text-center text-red-500 py-8">โหลดข้อมูลล้มเหลว โปรดตรวจสอบ Code.gs</div>';
+        })
+        .getDashboardStats(currentAdminDashView); // ส่งเดือนที่เลือกไปประมวลผลที่ Backend เลย
+}
+
+function processDashboardData(data) {
+    const tbody = document.getElementById('dashboard-table-body');
+
+    if (data && data.error) {
+        if(typeof showAdminToast === 'function') showAdminToast(data.error, "error");
+        if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-red-500">' + escapeHtml(data.error) + '</td></tr>';
+        return;
+    }
+
+    let studentsList = [];
+    let totalUsersCount = 0;
+    let totalLessonsCount = 0;
+
+    if (Array.isArray(data)) {
+        studentsList = data; 
+        totalUsersCount = studentsList.length;
+    } else if (data && Array.isArray(data.students)) {
+        studentsList = data.students; 
+        // อ้างอิงจาก length เพราะเรากรองจาก backend มาแล้ว
+        totalUsersCount = data.totalStudents || (typeof users !== 'undefined' ? users.length : studentsList.length);
+        totalLessonsCount = data.totalLessons || 0;
+    }
+
+    dashboardDataList = studentsList;
+
+    // อัปเดตตัวเลขแสดงผล
+    const eleTotalUsers = document.getElementById('dash-total-users');
+    const eleActiveUsers = document.getElementById('dash-active-users');
+    const eleTotalCourses = document.getElementById('dash-total-courses');
+
+    if (eleTotalUsers) eleTotalUsers.innerHTML = totalUsersCount + ' <span class="text-sm font-medium text-slate-400">คน</span>';
+    if (eleActiveUsers) eleActiveUsers.innerHTML = dashboardDataList.length + ' <span class="text-sm font-medium text-slate-400">คน</span>';
+    if (eleTotalCourses) eleTotalCourses.innerHTML = totalLessonsCount + ' <span class="text-sm font-medium text-slate-400">วิชา</span>';
+
+    if (dashboardDataList.length === 0) {
+        if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-500">ไม่พบข้อมูล หรือยังไม่มีผู้เรียนในช่วงเวลานี้</td></tr>';
+        const pBar = document.getElementById('dash-avg-progress-bar');
+        if(pBar) pBar.style.width = '0%';
+        const pText = document.getElementById('dash-avg-progress-text');
+        if(pText) pText.innerText = '0%';
+        
+        if(typeof renderPendingProofs === 'function') renderPendingProofs([]);
+        renderLeaderboard([]);
+        return; 
+    }
+
+    if(typeof renderPendingProofs === 'function') {
+        renderPendingProofs(dashboardDataList);
+    }
+
+    let avgProgress = 0;
+    if (totalUsersCount > 0) {
+        const totalProgress = dashboardDataList.reduce(function(sum, u) { return sum + (u.progressPercent || 0); }, 0);
+        avgProgress = Math.round(totalProgress / totalUsersCount);
+    }
+
+    const pBar = document.getElementById('dash-avg-progress-bar');
+    if(pBar) {
+        pBar.style.width = avgProgress + '%';
+        if (avgProgress >= 80) pBar.className = 'bg-emerald-500 h-2 rounded-full transition-all duration-1000';
+        else if (avgProgress >= 40) pBar.className = 'bg-amber-500 h-2 rounded-full transition-all duration-1000';
+        else pBar.className = 'bg-[#31c1d7] h-2 rounded-full transition-all duration-1000';
+    }
+    const pText = document.getElementById('dash-avg-progress-text');
+    if(pText) pText.innerText = avgProgress + '%';
+
+    // Sort ด้วย totalBN อย่างเดียว (เพราะ Backend กรองคะแนนตามเดือนมาให้แล้ว)
+    const sortedUsers = [...dashboardDataList].sort(function(a, b) { return (b.totalBN || 0) - (a.totalBN || 0); });
+    
+    renderLeaderboard(sortedUsers);
+    renderDashboardTable(sortedUsers);
+}
+
+function renderLeaderboard(sortedUsers) {
+    const top3Container = document.getElementById('dashboard-leaderboard-top3');
+    const othersContainer = document.getElementById('dashboard-leaderboard-others');
+    
+    if (!Array.isArray(sortedUsers) || sortedUsers.length === 0) {
+        if(top3Container) top3Container.innerHTML = '<div class="col-span-3 text-center text-slate-500 py-8">ยังไม่มีข้อมูลผู้นำในรอบเวลานี้</div>';
+        if(othersContainer) othersContainer.innerHTML = '';
+        return;
+    }
+
+    const activeUsers = sortedUsers.filter(function(u) {
+        return (u.totalBN || 0) > 0;
+    });
+
+    const top3 = activeUsers.slice(0, 3);
+    const others = activeUsers.slice(3, 10);
+
+    const ranks = [
+        { data: top3[1], icon: '🥈', color: 'slate',   scoreColor: 'text-slate-500',  border: 'border-slate-100', bg: 'bg-slate-50',     mt: 'md:mt-6', translate: '', shadow: 'shadow-sm' },
+        { data: top3[0], icon: '🥇', color: 'amber',   scoreColor: 'text-amber-500',  border: 'border-amber-300', bg: 'bg-amber-50',     mt: '', translate: 'transform md:-translate-y-4', shadow: 'shadow-md border-amber-200' },
+        { data: top3[2], icon: '🥉', color: 'orange',  scoreColor: 'text-orange-500', border: 'border-orange-200',bg: 'bg-orange-50',    mt: 'md:mt-6', translate: '', shadow: 'shadow-sm' }
+    ];
+
+    let top3Html = '';
+    ranks.forEach(function(rank, index) {
+        if (!rank.data) {
+            top3Html += '<div class="bg-white rounded-3xl shadow-sm border border-slate-100 p-6 flex flex-col items-center leaderboard-card relative overflow-hidden ' + rank.mt + '">' +
+                '<div class="w-16 h-16 rounded-full bg-slate-50 border-4 border-slate-100 flex items-center justify-center text-2xl mb-3">' + rank.icon + '</div>' +
+                '<h3 class="font-bold text-lg text-slate-300">ยังไม่มีผู้รั้งตำแหน่ง</h3>' +
+            '</div>';
+            return;
+        }
+
+        const isFirst = index === 1;
+        const sizeClass = isFirst ? 'w-20 h-20 text-4xl' : 'w-16 h-16 text-2xl';
+        const nameClass = isFirst ? 'text-xl' : 'text-lg';
+        const scoreClass = isFirst ? 'text-2xl' : 'text-xl';
+        const rankName = getRankName(rank.data.totalBN);
+        const displayName = rank.data.fullName || rank.data.email || '-';
+        const displayDept = rank.data.department || 'General';
+        const displayScore = rank.data.totalBN || 0;
+
+        top3Html += '<div class="bg-white rounded-3xl ' + rank.shadow + ' p-6 flex flex-col items-center leaderboard-card relative overflow-hidden ' + rank.mt + ' ' + rank.translate + '">' +
+            '<div class="' + sizeClass + ' rounded-full ' + rank.bg + ' border-4 ' + rank.border + ' flex items-center justify-center mb-3 relative">' +
+                rank.icon +
+            '</div>' +
+            '<h3 class="font-bold ' + nameClass + ' text-slate-800 text-center truncate w-full" title="' + escapeHtml(displayName) + '">' + escapeHtml(displayName) + '</h3>' +
+            '<p class="text-sm text-slate-500 mb-3 text-center">' + escapeHtml(displayDept) + '</p>' +
+            '<div class="' + scoreClass + ' font-black ' + rank.scoreColor + '">' +
+                new Intl.NumberFormat().format(displayScore) + ' <span class="text-sm font-medium text-slate-400">BN</span>' +
+            '</div>' +
+            '<div class="mt-3 px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold border border-slate-200">' +
+                rankName +
+            '</div>' +
+        '</div>';
+    });
+    if(top3Container) top3Container.innerHTML = top3Html;
+
+    let othersHtml = '<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">';
+    if (others.length > 0) {
+        others.forEach(function(u, idx) {
+            const rankNum = idx + 4;
+            const rankName = getRankName(u.totalBN);
+            const img = u.profileImage || 'https://ui-avatars.com/api/?name='+encodeURIComponent(u.fullName || u.email)+'&background=31c1d7&color=fff';
+            const displayScore = u.totalBN || 0;
+
+            othersHtml += '<div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-3.5 flex items-center justify-between hover:shadow-md transition">' +
+                    '<div class="flex items-center gap-3 overflow-hidden">' +
+                        '<div class="w-8 h-8 rounded-full bg-slate-50 border border-slate-100 text-slate-500 font-bold flex flex-shrink-0 items-center justify-center text-sm">' + rankNum + '</div>' +
+                        '<img src="' + escapeHtml(img) + '" class="w-8 h-8 rounded-full object-cover border border-slate-100 hidden sm:block">' +
+                        '<div class="truncate">' +
+                            '<h4 class="font-bold text-slate-800 text-sm truncate">' + escapeHtml(u.fullName || u.email || '-') + '</h4>' +
+                            '<p class="text-xs text-slate-500 truncate">' + escapeHtml(u.department || 'General') + '</p>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="text-right flex-shrink-0 pl-2">' +
+                        '<div class="font-black text-slate-700 text-[15px]">' + new Intl.NumberFormat().format(displayScore) + ' <span class="text-[9px] text-slate-400 font-medium">BN</span></div>' +
+                        '<div class="text-[9px] text-slate-500 font-medium mt-0.5">' + rankName + '</div>' +
+                    '</div>' +
+                '</div>';
+        });
+    } else {
+        othersHtml += '<div class="col-span-full text-center text-sm text-slate-400 py-4">ไม่มีผู้รั้งตำแหน่งเพิ่มเติมในรอบเวลานี้</div>';
+    }
+    othersHtml += '</div>';
+    if(othersContainer) othersContainer.innerHTML = othersHtml;
+}
+
+function renderDashboardTable(users) {
+    const tbody = document.getElementById('dashboard-table-body');
+    if (!users || !Array.isArray(users) || users.length === 0) {
+        if(tbody) tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-500">ไม่พบข้อมูลผู้เรียน</td></tr>';
+        return;
+    }
+
+    let html = '';
+    users.forEach(function(user, index) {
+        const globalRank = index + 1; 
+        const progress = user.progressPercent || 0;
+        const totalBN = user.totalBN || 0;
+        const displayScore = user.totalBN || 0;
+        const completedSections = user.completedSections ? user.completedSections.length : 0;
+        const rankName = getRankName(totalBN);
+        const displayName = user.fullName || '-';
+        const email = user.email || '';
+        const dept = user.department || 'General';
+        const pos = user.position || '-';
+
+        let pColor = 'bg-[#31c1d7]';
+        if (progress >= 80) pColor = 'bg-emerald-500';
+
+        let rankBadge = '<span class="inline-flex items-center justify-center w-7 h-7 rounded-full ' + (globalRank <= 3 ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-500') + ' font-bold text-xs">' + globalRank + '</span>';
+        if(globalRank === 1) rankBadge = '<span class="text-xl drop-shadow-sm" title="อันดับ 1">🥇</span>';
+        else if(globalRank === 2) rankBadge = '<span class="text-xl drop-shadow-sm" title="อันดับ 2">🥈</span>';
+        else if(globalRank === 3) rankBadge = '<span class="text-xl drop-shadow-sm" title="อันดับ 3">🥉</span>';
+
+        html += '<tr class="hover:bg-[#31c1d7]/5 transition-colors group cursor-pointer" onclick="showUserDetails(\'' + escapeJsString(email) + '\')" title="คลิกเพื่อดูประวัติคอร์สที่เรียน">' +
+            '<td class="p-4 text-center">' + rankBadge + '</td>' +
+            '<td class="p-4">' +
+                '<div class="font-bold text-slate-800">' + escapeHtml(displayName) + '</div>' +
+                '<div class="text-[11px] text-slate-400">' + escapeHtml(email) + '</div>' +
+            '</td>' +
+            '<td class="p-4">' +
+                '<div class="font-medium text-slate-700">' + escapeHtml(dept) + '</div>' +
+                '<div class="text-[11px] text-slate-500">' + escapeHtml(pos) + '</div>' +
+            '</td>' +
+            '<td class="p-4">' +
+                '<div class="flex items-center gap-2">' +
+                    '<div class="w-full bg-slate-100 rounded-full h-2">' +
+                        '<div class="' + pColor + ' h-2 rounded-full" style="width: ' + progress + '%"></div>' +
+                    '</div>' +
+                    '<span class="text-xs font-extrabold text-slate-700 w-8">' + progress + '%</span>' +
+                '</div>' +
+            '</td>' +
+            '<td class="p-4 text-center font-bold text-slate-600">' + completedSections + '</td>' +
+            '<td class="p-4 text-center font-black text-[#31c1d7] text-base">' + new Intl.NumberFormat().format(displayScore) + '</td>' +
+            '<td class="p-4 text-center">' +
+                '<span class="px-2.5 py-1 bg-white border border-slate-200 text-slate-600 rounded-md text-[11px] font-bold shadow-sm group-hover:border-[#31c1d7] transition-colors">' +
+                    rankName +
+                '</span>' +
+            '</td>' +
+        '</tr>';
+    });
+
+    if(tbody) tbody.innerHTML = html;
+}
+
+function showUserDetails(email) {
+    const user = dashboardDataList.find(function(u) { return u.email === email; });
+    if (!user) return;
+
+    document.getElementById('user-details-title').textContent = 'ประวัติการเรียนของ: ' + (user.fullName || user.email);
+    const container = document.getElementById('user-details-content');
+
+    if ((!user.completedSections || user.completedSections.length === 0) && (!user.externalProofs || user.externalProofs.length === 0)) {
+        container.innerHTML = '<div class="text-center p-8 text-slate-400">ยังไม่เริ่มเรียนคอร์สใดเลย</div>';
+        document.getElementById('user-details-modal').classList.remove('hidden');
+        return;
+    }
+
+    let html = '<div class="space-y-4">';
+    if (typeof lessons !== 'undefined') {
+        lessons.forEach(function(lesson) {
+            const lessonSections = (typeof sections !== 'undefined') ? sections.filter(function(s) { return s.LessonID === lesson.LessonID; }) : [];
+            if (lessonSections.length === 0) return;
+
+            let completedCount = 0;
+            let totalQuizScore = 0;
+            let totalQuizCount = 0;
+            let hasActivity = false;
+
+            let sectionsHtml = '';
+
+            lessonSections.forEach(function(sec) {
+                const isCompleted = user.completedSections && user.completedSections.includes(sec.SectionID);
+                if (isCompleted) completedCount++;
+
+                if (user.scores && user.scores[sec.SectionID] !== undefined) {
+                    totalQuizScore += user.scores[sec.SectionID];
+                    totalQuizCount++;
+                    hasActivity = true;
+                }
+
+                if (sec.ContentType === 'external') {
+                    const proof = user.externalProofs ? user.externalProofs.find(function(p) { return p.SectionID === sec.SectionID; }) : null;
+                    if (proof) {
+                        hasActivity = true;
+                        let statusBadge = '';
+                        let actionBtns = '';
+                        
+                        if (proof.Status === 'Pending') {
+                            statusBadge = '<span class="text-amber-500 bg-amber-50 px-2 py-0.5 rounded text-[10px] font-bold border border-amber-100">⏳ รอตรวจ</span>';
+                            actionBtns = '<button onclick="updateProofStatus(\'' + escapeJsString(email) + '\', \'' + escapeJsString(sec.SectionID) + '\', \'Approved\')" class="px-2 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded text-[10px] font-bold transition">อนุมัติ</button>' +
+                                         '<button onclick="updateProofStatus(\'' + escapeJsString(email) + '\', \'' + escapeJsString(sec.SectionID) + '\', \'Rejected\')" class="px-2 py-1 bg-rose-500 hover:bg-rose-600 text-white rounded text-[10px] font-bold transition">ปฏิเสธ</button>';
+                        } else if (proof.Status === 'Approved') {
+                            statusBadge = '<span class="text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded text-[10px] font-bold border border-emerald-100">✅ อนุมัติแล้ว</span>';
+                        } else {
+                            statusBadge = '<span class="text-rose-600 bg-rose-50 px-2 py-0.5 rounded text-[10px] font-bold border border-rose-100">❌ ไม่อนุมัติ</span>';
+                        }
+                        
+                        sectionsHtml += '<div class="mt-2 p-2 bg-slate-50 border border-slate-100 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2">' +
+                            '<div class="flex items-center gap-2">' +
+                                '<span class="text-xs font-bold text-slate-700">' + escapeHtml(sec.Title) + '</span>' +
+                                '<a href="' + escapeHtml(proof.FileUrl) + '" target="_blank" class="text-blue-500 hover:text-blue-700 hover:underline text-[11px] font-bold flex items-center gap-1">🖼️ ดูรูปหลักฐาน</a>' +
+                                statusBadge +
+                            '</div>' +
+                            '<div class="flex gap-2" id="proof-action-' + sec.SectionID + '">' + actionBtns + '</div>' +
+                        '</div>';
+                    }
+                }
+            });
+
+            if (completedCount > 0 || hasActivity) {
+                const progress = Math.round((completedCount / lessonSections.length) * 100);
+                const avgScore = totalQuizCount > 0 ? Math.round((totalQuizScore / totalQuizCount) * 100) : 0;
+                const isCourseCompleted = progress === 100;
+
+                html += '<div class="bg-white p-4 rounded-2xl border ' + (isCourseCompleted ? 'border-emerald-200 shadow-sm' : 'border-slate-200 hover:border-[#31c1d7]/30') + ' transition-all">' +
+                    '<div class="flex justify-between items-start mb-2">' +
+                        '<h4 class="font-bold text-slate-800 text-sm">' + escapeHtml(lesson.Title) + '</h4>' +
+                        (isCourseCompleted ? '<span class="px-2 py-1 bg-emerald-100 text-emerald-600 text-[10px] font-bold rounded-lg flex-shrink-0 ml-2">เรียนจบแล้ว</span>' : '<span class="px-2 py-1 bg-[#31c1d7]/10 text-[#31c1d7] text-[10px] font-bold rounded-lg flex-shrink-0 ml-2">กำลังเรียน</span>') +
+                    '</div>' +
+                    '<div class="flex items-center gap-4 text-sm mt-3">' +
+                        '<div class="flex-grow">' +
+                            '<div class="flex justify-between text-[11px] font-bold text-slate-500 mb-1"><span>ความคืบหน้า (' + completedCount + '/' + lessonSections.length + ' ตอน)</span><span class="' + (isCourseCompleted ? 'text-emerald-500' : 'text-[#31c1d7]') + '">' + progress + '%</span></div>' +
+                            '<div class="w-full bg-slate-100 rounded-full h-1.5"><div class="' + (isCourseCompleted ? 'bg-emerald-500' : 'bg-[#31c1d7]') + ' h-1.5 rounded-full" style="width: ' + progress + '%"></div></div>' +
+                        '</div>' +
+                        (totalQuizCount > 0 ? '<div class="flex-shrink-0 text-center pl-4 border-l border-slate-100"><div class="text-[10px] font-bold text-slate-400">คะแนนสอบ</div><div class="font-black text-violet-600 text-lg">' + avgScore + '%</div></div>' : '') +
+                    '</div>' +
+                    sectionsHtml +
+                '</div>';
+            }
+        });
+    }
+    html += '</div>';
+
+    container.innerHTML = html || '<div class="text-center p-8 text-slate-400">ยังไม่เริ่มเรียนคอร์สใดเลย</div>';
+    document.getElementById('user-details-modal').classList.remove('hidden');
+}
+
+function updateProofStatus(email, sectionId, newStatus) {
+    const isApprove = newStatus === 'Approved';
+    if(typeof showCustomConfirm === 'function') {
+        showCustomConfirm({
+            title: isApprove ? 'ยืนยันการอนุมัติ' : 'ปฏิเสธหลักฐาน',
+            message: 'ยืนยันที่จะ ' + (isApprove ? '<span class="text-emerald-600 font-bold">อนุมัติ</span>' : '<span class="text-rose-600 font-bold">ปฏิเสธ</span>') + ' หลักฐานนี้ใช่หรือไม่?',
+            type: isApprove ? 'success' : 'danger',
+            confirmText: isApprove ? 'ยืนยันอนุมัติ' : 'ยืนยันปฏิเสธ',
+            onConfirm: function() {
+                const container = document.getElementById('proof-action-' + sectionId);
+                if (container) container.innerHTML = '<span class="text-xs text-slate-400">กำลังบันทึก...</span>';
+                
+                google.script.run
+                    .withSuccessHandler(function(res) {
+                        if (res.status === 'success') {
+                            if(typeof showAdminToast === 'function') showAdminToast('บันทึกสถานะเรียบร้อยแล้ว');
+                            loadDashboardData();
+                            document.getElementById('user-details-modal').classList.add('hidden');
+                        } else {
+                            if(typeof showAdminToast === 'function') showAdminToast('เกิดข้อผิดพลาด: ' + res.message, 'error');
+                            if (container) container.innerHTML = '<span class="text-xs text-red-500">ล้มเหลว</span>';
+                        }
+                    })
+                    .adminUpdateProofStatus(email, sectionId, newStatus);
+            }
+        });
+    } else {
+        if (!confirm('ยืนยันที่จะ ' + (isApprove ? 'อนุมัติ' : 'ปฏิเสธ') + ' หลักฐานนี้ใช่หรือไม่?')) return;
+        const container = document.getElementById('proof-action-' + sectionId);
+        if (container) container.innerHTML = '<span class="text-xs text-slate-400">กำลังบันทึก...</span>';
+        
+        google.script.run
+            .withSuccessHandler(function(res) {
+                if (res.status === 'success') {
+                    alert('บันทึกสถานะเรียบร้อยแล้ว');
+                    loadDashboardData();
+                    document.getElementById('user-details-modal').classList.add('hidden');
+                } else {
+                    alert('เกิดข้อผิดพลาด: ' + res.message);
+                    if (container) container.innerHTML = '<span class="text-xs text-red-500">ล้มเหลว</span>';
+                }
+            })
+            .adminUpdateProofStatus(email, sectionId, newStatus);
+    }
+}
+
+function showCourseLearners(lessonId) {
+    if (typeof lessons === 'undefined' || typeof sections === 'undefined') return;
+    const lesson = lessons.find(function(l) { return l.LessonID === lessonId; });
+    if (!lesson) return;
+
+    document.getElementById('course-learners-title').textContent = 'ผู้เข้าเรียน: ' + lesson.Title;
+    const container = document.getElementById('course-learners-content');
+
+    const lessonSections = sections.filter(function(s) { return s.LessonID === lessonId; }).map(function(s) { return s.SectionID; });
+    
+    if (!dashboardDataList || dashboardDataList.length === 0) {
+        container.innerHTML = '<div class="text-center p-8 text-slate-400"><svg class="animate-spin h-5 w-5 mx-auto text-[#31c1d7] mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>กำลังดึงข้อมูลส่วนกลาง โปรดรอสักครู่... (หรือลองเข้าไปที่แท็บ "รายงานผู้เรียน" ก่อน)</div>';
+        
+        if (typeof google !== 'undefined' && google.script) {
+            const periodSelect = document.getElementById('dashboard-period-filter');
+            const periodVal = periodSelect ? periodSelect.value : 'all';
+            google.script.run.withSuccessHandler(function(res) {
+                let parsed = res;
+                if(typeof res === 'string') try { parsed = JSON.parse(res); } catch(e){}
+                if(parsed && parsed.students) { dashboardDataList = parsed.students; showCourseLearners(lessonId); }
+            }).getDashboardStats(periodVal);
+        }
+        document.getElementById('course-learners-modal').classList.remove('hidden');
+        return;
+    }
+
+    if (lessonSections.length === 0) {
+        container.innerHTML = '<div class="text-center p-8 text-slate-400">คอร์สนี้ยังไม่มีการเพิ่มวิดีโอเนื้อหาเลยครับ</div>';
+        document.getElementById('course-learners-modal').classList.remove('hidden');
+        return;
+    }
+
+    const learners = [];
+    dashboardDataList.forEach(function(user) {
+        let completedCount = 0;
+        lessonSections.forEach(function(secId) {
+            if (user.completedSections && user.completedSections.includes(secId)) {
+                completedCount++;
+            }
+        });
+        if (completedCount > 0) {
+            learners.push({
+                user: user,
+                progress: Math.round((completedCount / lessonSections.length) * 100)
+            });
+        }
+    });
+
+    learners.sort(function(a, b) { return b.progress - a.progress; });
+
+    if (learners.length === 0) {
+        container.innerHTML = '<div class="text-center p-8 text-slate-400">ยังไม่มีพนักงานเริ่มเรียนคอร์สนี้ครับ</div>';
+        document.getElementById('course-learners-modal').classList.remove('hidden');
+        return;
+    }
+
+    let html = '<div class="space-y-3">';
+    learners.forEach(function(data) {
+        const u = data.user;
+        const isCompleted = data.progress === 100;
+        const img = u.profileImage || 'https://ui-avatars.com/api/?name='+encodeURIComponent(u.fullName || u.email)+'&background=31c1d7&color=fff';
+        
+        html += '<div class="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-shadow">' +
+            '<div class="flex items-center gap-3">' +
+                '<img src="' + escapeHtml(img) + '" class="w-10 h-10 rounded-full object-cover border border-slate-200">' +
+                '<div>' +
+                    '<h4 class="text-sm font-bold text-slate-800">' + escapeHtml(u.fullName || u.email) + '</h4>' +
+                    '<p class="text-[11px] text-slate-500">' + escapeHtml(u.department || 'General') + '</p>' +
+                '</div>' +
+            '</div>' +
+            '<div class="text-right">' +
+                '<span class="inline-block px-2 py-0.5 ' + (isCompleted ? 'bg-emerald-100 text-emerald-600' : 'bg-[#31c1d7]/10 text-[#31c1d7]') + ' text-[10px] font-bold rounded-lg mb-1">' + (isCompleted ? 'เรียนจบแล้ว' : 'กำลังเรียน') + '</span>' +
+                '<div class="flex items-center gap-2 justify-end">' +
+                    '<div class="w-16 bg-slate-100 rounded-full h-1.5"><div class="' + (isCompleted ? 'bg-emerald-500' : 'bg-[#31c1d7]') + ' h-1.5 rounded-full" style="width: ' + data.progress + '%"></div></div>' +
+                    '<div class="text-xs font-black text-slate-700">' + data.progress + '%</div>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
+    });
+    html += '</div>';
+
+    container.innerHTML = html;
+    document.getElementById('course-learners-modal').classList.remove('hidden');
+}
+
+document.getElementById('dashboard-search')?.addEventListener('input', function(e) {
+    const keyword = e.target.value.toLowerCase().trim();
+    if (!dashboardDataList) return;
+    
+    const filteredUsers = dashboardDataList.filter(function(u) {
+        return (u.fullName && u.fullName.toLowerCase().includes(keyword)) || 
+               (u.email && u.email.toLowerCase().includes(keyword)) || 
+               (u.department && u.department.toLowerCase().includes(keyword)) ||
+               (u.position && u.position.toLowerCase().includes(keyword));
+    });
+    
+    filteredUsers.sort(function(a, b) { 
+        return (b.totalBN || 0) - (a.totalBN || 0); 
+    });
+    renderDashboardTable(filteredUsers);
+});
+
+function exportDashboardData(format) {
+    if (!dashboardDataList || dashboardDataList.length === 0) {
+        if(typeof showAdminToast === 'function') showAdminToast('ไม่พบข้อมูลสำหรับส่งออก', 'warning');
+        return;
+    }
+
+    if (format === 'csv') {
+        const periodSelect = document.getElementById('dashboard-period-filter');
+        const periodText = periodSelect ? periodSelect.options[periodSelect.selectedIndex].text : 'All-time';
+
+        let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; 
+        csvContent += "ช่วงเวลา," + periodText + "\r\n";
+        csvContent += "อันดับ,อีเมลพนักงาน,ชื่อ-นามสกุล,แผนก,ตำแหน่ง,ความคืบหน้า (%),จำนวนตอนที่ดูจบ,คะแนนพิเศษ (Manual),คะแนนรวมรอบนี้ (BN),Rank (ยศ)\r\n";
+        
+        const exportData = [...dashboardDataList].sort(function(a, b) { 
+            return (b.totalBN || 0) - (a.totalBN || 0); 
+        });
+
+        exportData.forEach(function(user, idx) {
+            const globalRank = idx + 1;
+            const completedSections = user.completedSections ? user.completedSections.length : 0;
+            const rankName = getRankName(user.totalBN);
+            const manualPts = user.manualBN || 0;
+            const displayScore = user.totalBN || 0;
+            
+            csvContent += globalRank + ',"' + (user.email || '') + '","' + (user.fullName || '') + '","' + (user.department || '') + '","' + (user.position || '') + '",' + (user.progressPercent || 0) + ',' + completedSections + ',' + manualPts + ',' + displayScore + ',"' + rankName + '"\r\n';
+        });
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        
+        const dateStr = new Date().toISOString().split('T')[0];
+        link.setAttribute("download", "SkillNeat_Report_" + dateStr + ".csv");
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+}
+</script>
