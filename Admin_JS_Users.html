@@ -1,0 +1,250 @@
+<script>
+/* ==========================================
+   6. ระบบจัดการพนักงาน (Users)
+========================================== */
+function renderUsersList() {
+    const container = document.getElementById('admin-users-list');
+    if (!container) return;
+
+    let filterContainer = document.getElementById('admin-users-filter-container');
+    if (!filterContainer) {
+        const wrapper = container.closest('.overflow-x-auto');
+        if (wrapper) {
+            const filterHtml = `
+            <div id="admin-users-filter-container" class="flex flex-col md:flex-row gap-3 mb-4 w-full">
+                <div class="relative flex-grow">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    </div>
+                    <input type="text" id="admin-user-search-val" placeholder="ค้นหาชื่อ, อีเมล..." class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-[#31c1d7] outline-none">
+                </div>
+                <select id="admin-user-dept-val" class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 focus:ring-2 focus:ring-[#31c1d7] outline-none min-w-[160px]">
+                    <option value="">ทุกแผนก</option>
+                </select>
+                <select id="admin-user-pos-val" class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 focus:ring-2 focus:ring-[#31c1d7] outline-none min-w-[160px]">
+                    <option value="">ทุกตำแหน่ง</option>
+                </select>
+            </div>`;
+            wrapper.insertAdjacentHTML('beforebegin', filterHtml);
+            
+            document.getElementById('admin-user-search-val').addEventListener('input', renderUsersList);
+            document.getElementById('admin-user-dept-val').addEventListener('change', renderUsersList);
+            document.getElementById('admin-user-pos-val').addEventListener('change', renderUsersList);
+        }
+    }
+
+    const deptSelect = document.getElementById('admin-user-dept-val');
+    if (deptSelect && deptSelect.options.length <= 1 && masterData && masterData.departments) {
+        masterData.departments.forEach(d => {
+            if (d !== 'ทั้งหมด (All)') deptSelect.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`);
+        });
+    }
+    const posSelect = document.getElementById('admin-user-pos-val');
+    if (posSelect && posSelect.options.length <= 1 && masterData && masterData.positions) {
+        masterData.positions.forEach(p => {
+            if (p !== 'ทั้งหมด (All)') posSelect.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`);
+        });
+    }
+
+    const searchKw = document.getElementById('admin-user-search-val') ? document.getElementById('admin-user-search-val').value.toLowerCase().trim() : '';
+    const filterDept = document.getElementById('admin-user-dept-val') ? document.getElementById('admin-user-dept-val').value : '';
+    const filterPos = document.getElementById('admin-user-pos-val') ? document.getElementById('admin-user-pos-val').value : '';
+
+    const filteredUsers = users.filter(u => {
+        const matchKw = searchKw === '' || 
+                        (u.FullName && u.FullName.toLowerCase().includes(searchKw)) || 
+                        (u.Email && u.Email.toLowerCase().includes(searchKw)) ||
+                        (u.Nickname && u.Nickname.toLowerCase().includes(searchKw));
+        
+        const uDept = (u.Department && u.Department !== 'General') ? u.Department : 'ส่วนกลาง';
+        const matchDept = filterDept === '' || uDept === filterDept;
+        
+        const uPos = u.Position || 'พนักงานทั่วไป';
+        const matchPos = filterPos === '' || uPos === filterPos;
+        
+        return matchKw && matchDept && matchPos;
+    });
+
+    if (filteredUsers.length === 0) {
+        container.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">ไม่พบข้อมูลพนักงานที่ค้นหา</td></tr>';
+        return;
+    }
+
+    let html = '';
+    filteredUsers.forEach(function(u) {
+        const img = u.ProfileImage || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(u.Nickname || u.Email) + '&background=31c1d7&color=fff';
+        const fullName = u.FullName || 'ยังไม่ระบุชื่อ';
+        const nickName = u.Nickname || '-';
+        const dept = u.Department && u.Department !== 'General' ? u.Department : 'ส่วนกลาง';
+        const pos = u.Position || 'พนักงานทั่วไป';
+        const manualBN = u.ManualBN || 0;
+
+        html += '<tr class="hover:bg-slate-50 transition-colors">' +
+            '<td class="py-3 px-4 border-b border-slate-100">' +
+                '<div class="flex items-center space-x-3">' +
+                    '<img src="' + escapeHtml(img) + '" class="w-10 h-10 rounded-xl object-cover shadow-sm">' +
+                    '<div>' +
+                        '<p class="text-sm font-bold text-slate-800">' + escapeHtml(fullName) + '</p>' +
+                        '<p class="text-xs text-slate-500">ชื่อเล่น: ' + escapeHtml(nickName) + '</p>' +
+                    '</div>' +
+                '</div>' +
+            '</td>' +
+            '<td class="py-3 px-4 border-b border-slate-100 text-sm text-slate-600 font-mono">' + escapeHtml(u.Email) + '</td>' +
+            '<td class="py-3 px-4 border-b border-slate-100 text-sm">' +
+                '<span class="px-2.5 py-1 bg-[#31c1d7]/10 text-[#31c1d7] border border-[#31c1d7]/20 rounded-md font-medium text-xs">' + escapeHtml(dept) + '</span>' +
+            '</td>' +
+            '<td class="py-3 px-4 border-b border-slate-100 text-sm text-slate-700">' + escapeHtml(pos) + '</td>' +
+            '<td class="py-3 px-4 border-b border-slate-100 text-center font-bold text-amber-500">' + new Intl.NumberFormat().format(manualBN) + '</td>' +
+            '<td class="py-3 px-4 border-b border-slate-100 text-center">' +
+                '<button onclick="openUserModal(\'' + escapeHtml(u.Email) + '\')" class="text-[#31c1d7] hover:bg-[#31c1d7]/10 border border-transparent hover:border-[#31c1d7]/30 px-3 py-1.5 rounded-lg transition-colors inline-flex items-center text-xs font-bold shadow-sm">' +
+                    '<svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg> แก้ไข' +
+                '</button>' +
+                '<button onclick="openManualScoreModal(\'' + escapeHtml(u.Email) + '\')" class="text-amber-500 hover:bg-amber-50 border border-transparent hover:border-amber-200 px-3 py-1.5 rounded-lg transition-colors inline-flex items-center text-xs font-bold shadow-sm ml-2">' +
+                    '✨ ให้คะแนน' +
+                '</button>' +
+            '</td>' +
+        '</tr>';
+    });
+    container.innerHTML = html;
+}
+
+function openUserModal(email) {
+    const user = users.find(function(u) { return u.Email === email; });
+    if (!user) return;
+
+    document.getElementById('user-email-hidden').value = user.Email;
+    document.getElementById('user-email-display').value = user.Email;
+    document.getElementById('user-fullname').value = user.FullName || '';
+    document.getElementById('user-nickname').value = user.Nickname || '';
+    
+    const manualBNInput = document.getElementById('user-manual-bn');
+    if (manualBNInput) manualBNInput.value = user.ManualBN || 0;
+    
+    const deptSelect = document.getElementById('user-department');
+    const posSelect = document.getElementById('user-position');
+    
+    if (user.Department) deptSelect.value = user.Department; else deptSelect.value = 'General';
+    if (user.Position) posSelect.value = user.Position; else posSelect.value = 'พนักงานทั่วไป';
+
+    document.getElementById('user-modal').classList.remove('hidden');
+}
+
+function saveUser(e) {
+    e.preventDefault();
+    const saveBtn = document.getElementById('save-user-btn');
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = 'กำลังบันทึก...';
+
+    let manualBnVal = 0;
+    const mbInput = document.getElementById('user-manual-bn');
+    if (mbInput) manualBnVal = parseInt(mbInput.value) || 0;
+
+    const userData = {
+        Email: document.getElementById('user-email-hidden').value,
+        FullName: document.getElementById('user-fullname').value.trim(),
+        Nickname: document.getElementById('user-nickname').value.trim(),
+        Department: document.getElementById('user-department').value,
+        Position: document.getElementById('user-position').value,
+        ManualBN: manualBnVal 
+    };
+
+    google.script.run
+        .withSuccessHandler(function(response) {
+            if(response.status === 'success') {
+                document.getElementById('user-modal').classList.add('hidden');
+                
+                const idx = users.findIndex(function(u) { return u.Email === userData.Email; });
+                if (idx > -1) {
+                    users[idx].FullName = userData.FullName;
+                    users[idx].Nickname = userData.Nickname;
+                    users[idx].Department = userData.Department;
+                    users[idx].Position = userData.Position;
+                    users[idx].ManualBN = userData.ManualBN;
+                }
+                
+                renderUsersList();
+                showAdminToast('บันทึกข้อมูลและคะแนนเรียบร้อยแล้ว');
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = 'บันทึกข้อมูล';
+            } else {
+                showAdminToast(response.message, 'error');
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = 'บันทึกข้อมูล';
+            }
+        })
+        .saveUserAdmin(userData);
+}
+
+function openManualScoreModal(email) {
+    let form = document.getElementById('manual-score-form');
+    
+    if (!form) {
+        const modalHtml = `
+        <div id="manual-score-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden z-[200] flex justify-center items-center p-4 transition-opacity">
+            <form id="manual-score-form" class="bg-white rounded-3xl w-full max-w-md shadow-xl overflow-hidden" onsubmit="saveManualScore(event)">
+                <div class="px-6 py-5 border-b border-slate-100 bg-white flex justify-between items-center">
+                    <div class="flex items-center gap-3">
+                        <span class="text-2xl">✨</span>
+                        <h3 class="text-2xl font-extrabold text-slate-800">เพิ่ม/ลด คะแนนพิเศษ</h3>
+                    </div>
+                    <button type="button" onclick="closeModals()" class="text-slate-400 hover:text-red-500 bg-slate-50 hover:bg-red-50 rounded-full w-8 h-8 flex items-center justify-center font-bold transition-colors">&times;</button>
+                </div>
+                <div class="p-6 bg-slate-50/50 space-y-4">
+                    <div>
+                        <label class="block text-sm font-bold text-slate-700 mb-1">อีเมลพนักงาน</label>
+                        <input type="text" id="manual-score-email" disabled class="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-slate-500 font-mono text-sm cursor-not-allowed">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-slate-700 mb-1">จำนวนคะแนน (BN) <span class="text-red-500">*</span></label>
+                        <input type="number" id="manual-score-points" required placeholder="เช่น 100 (ใส่ค่าติดลบเพื่อหักคะแนน)" class="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#31c1d7] outline-none font-bold text-lg text-slate-800">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-slate-700 mb-1">หมายเหตุ / เหตุผล <span class="text-red-500">*</span></label>
+                        <textarea id="manual-score-reason" required rows="2" placeholder="เช่น ย้ายข้อมูลจากระบบเดิม หรือ อ่านหนังสือประจำเดือน..." class="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#31c1d7] outline-none custom-scrollbar text-sm"></textarea>
+                    </div>
+                    <div class="bg-amber-50 p-3 rounded-xl border border-amber-100">
+                        <p class="text-xs text-amber-700 font-medium">⚠️ คะแนนที่บันทึกจะไปแสดงในยอดรวมของเดือนนี้โดยอัตโนมัติ และจะมีการบันทึกประวัติผู้ทำรายการเก็บไว้</p>
+                    </div>
+                </div>
+                <div class="px-6 py-4 bg-white border-t border-slate-100 flex justify-end space-x-3">
+                    <button type="button" onclick="closeModals()" class="px-5 py-2.5 bg-slate-50 text-slate-700 font-bold rounded-xl hover:bg-slate-100 transition-colors">ยกเลิก</button>
+                    <button type="submit" id="save-manual-score-btn" class="px-6 py-2.5 bg-slate-800 text-white font-bold rounded-xl shadow-sm hover:bg-slate-900 transition-all">บันทึกคะแนน</button>
+                </div>
+            </form>
+        </div>`;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        form = document.getElementById('manual-score-form');
+    }
+    
+    form.reset();
+    document.getElementById('manual-score-email').value = email;
+    document.getElementById('manual-score-modal').classList.remove('hidden');
+}
+
+function saveManualScore(e) {
+    e.preventDefault();
+    const btn = document.getElementById('save-manual-score-btn');
+    btn.disabled = true;
+    btn.innerText = 'กำลังบันทึก...';
+
+    const data = {
+        email: document.getElementById('manual-score-email').value,
+        points: document.getElementById('manual-score-points').value,
+        reason: document.getElementById('manual-score-reason').value
+    };
+
+    google.script.run
+        .withSuccessHandler(function(res) {
+            if(res.status === 'success') {
+                showAdminToast('เพิ่มคะแนนพิเศษสำเร็จ!');
+                closeModals();
+                loadDashboardData(); 
+            } else {
+                showAdminToast(res.message, 'error');
+            }
+            btn.disabled = false;
+            btn.innerText = 'บันทึกคะแนน';
+        })
+        .adminAddManualScore(data);
+}
+</script>
