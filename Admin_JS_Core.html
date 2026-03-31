@@ -37,7 +37,8 @@ lessons.forEach(function(lesson) {
 
 if (!masterData || (!masterData.categories && !masterData.departments)) {
     masterData = {
-        categories: ['ความรู้ทั่วไป', 'ทักษะวิชาชีพ', 'ความเป็นผู้นำ'],
+        mainCategories: ['1. About BeNeat|สร้างรากฐานความเข้าใจในองค์กร', '2. Operation & HR|ระบบปฏิบัติการและบริการบุคลากร'], 
+        categories: ['1. About BeNeat|The BeNeat Way|ประวัติ, วิสัยทัศน์, พันธกิจ', '1. About BeNeat|The BeNeat Family|โครงสร้างองค์กร'],
         departments: ['ทั้งหมด (All)', 'ฝ่ายบุคคล', 'ฝ่ายขาย', 'ฝ่ายการตลาด'],
         positions: ['ทั้งหมด (All)', 'พนักงาน', 'หัวหน้างาน', 'ผู้บริหาร']
     };
@@ -47,6 +48,7 @@ var activeLessonId = null;
 var activeSectionId = null;
 var currentEmailTags = []; 
 var currentAnswerTags = [];
+var activeMainCategoryForSetting = null; // JAVIS: ตัวแปรจำค่าหมวดหมู่หลักที่ถูกเลือก
 
 function escapeHtml(unsafe) {
     return (unsafe || '').toString()
@@ -84,7 +86,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }).getStudentData();
         
-        loadDashboardData();
+        if(typeof loadDashboardData === 'function') loadDashboardData();
     }
 });
 
@@ -184,51 +186,36 @@ function closeModals() {
 /* ==========================================
    2. ระบบหน้า Settings (เพิ่ม/ลบ Master Data)
 ========================================== */
-function renderSettingsLists() {
-    let catHtml = '';
-    if (masterData.categories) {
-        masterData.categories.forEach(function(item) {
-            catHtml += '<div class="flex justify-between items-center bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">' +
-                '<span class="text-sm font-medium text-slate-700">' + escapeHtml(item) + '</span>' +
-                '<button onclick="deleteMasterDataItem(\'categories\', \'' + escapeHtml(item) + '\')" class="text-red-400 hover:text-red-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>' +
-                '</div>';
-        });
-    }
-    document.getElementById('settings-categories-list').innerHTML = catHtml;
 
-    let deptHtml = '';
-    if (masterData.departments) {
-        masterData.departments.forEach(function(item) {
-            const deleteBtn = item === 'ทั้งหมด (All)' ? '' : '<button onclick="deleteMasterDataItem(\'departments\', \'' + escapeHtml(item) + '\')" class="text-red-400 hover:text-red-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>';
-            deptHtml += '<div class="flex justify-between items-center bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">' +
-                '<span class="text-sm font-medium text-slate-700">' + escapeHtml(item) + '</span>' + deleteBtn + '</div>';
-        });
-    }
-    document.getElementById('settings-departments-list').innerHTML = deptHtml;
-
-    let posHtml = '';
-    if (masterData.positions) {
-        masterData.positions.forEach(function(item) {
-            const deleteBtn = item === 'ทั้งหมด (All)' ? '' : '<button onclick="deleteMasterDataItem(\'positions\', \'' + escapeHtml(item) + '\')" class="text-red-400 hover:text-red-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>';
-            posHtml += '<div class="flex justify-between items-center bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">' +
-                '<span class="text-sm font-medium text-slate-700">' + escapeHtml(item) + '</span>' + deleteBtn + '</div>';
-        });
-    }
-    document.getElementById('settings-positions-list').innerHTML = posHtml;
-
-    renderMasterDataOptions();
+// JAVIS: ฟังก์ชันเมื่อคลิกการ์ดหมวดหมู่หลักทางซ้าย
+function selectSettingMainCategory(catName) {
+    activeMainCategoryForSetting = catName;
+    renderSettingsLists();
 }
 
-function addMasterDataItem(type, inputId) {
-    const input = document.getElementById(inputId);
-    const value = input.value.trim();
-    if (!value) return;
+function addMainCategory() {
+    const nameInput = document.getElementById('new-main-category-name');
+    const descInput = document.getElementById('new-main-category-desc');
+    
+    const name = nameInput ? nameInput.value.trim() : '';
+    const desc = descInput ? descInput.value.trim() : '';
+    
+    if (!name) { showAdminToast('กรุณากรอกชื่อหมวดหมู่หลัก', 'warning'); return; }
 
-    if (!masterData[type]) masterData[type] = [];
+    const value = desc ? name + '|' + desc : name;
+    
+    if (!masterData.mainCategories) masterData.mainCategories = [];
 
-    if (!masterData[type].includes(value)) {
-        masterData[type].push(value);
-        input.value = '';
+    const isExist = masterData.mainCategories.some(function(cat) {
+        const catName = cat.includes('|') ? cat.split('|')[0] : cat;
+        return catName.toLowerCase() === name.toLowerCase();
+    });
+
+    if (!isExist) {
+        masterData.mainCategories.push(value);
+        if(nameInput) nameInput.value = '';
+        if(descInput) descInput.value = '';
+        
         renderSettingsLists();
         showAdminToast('กำลังบันทึกข้อมูล...', 'success');
         
@@ -238,18 +225,173 @@ function addMasterDataItem(type, inputId) {
             }
         }).saveMasterData(masterData);
     } else {
-        showAdminToast('มีชื่อนี้อยู่ในระบบแล้ว', 'warning');
+        showAdminToast('มีชื่อหมวดหมู่หลักนี้ในระบบแล้ว', 'warning');
     }
+}
+
+function addSubCategory() {
+    const parent = activeMainCategoryForSetting;
+    const sub = document.getElementById('new-category-input').value.trim();
+    const desc = document.getElementById('new-category-desc').value.trim(); 
+    
+    if (!parent) { showAdminToast('กรุณาเลือกหมวดหมู่หลักด้านซ้ายก่อนครับ', 'warning'); return; }
+    if (!sub) { showAdminToast('กรุณากรอกชื่อหมวดหมู่ย่อย', 'warning'); return; }
+
+    const value = desc ? parent + '|' + sub + '|' + desc : parent + '|' + sub;
+    
+    if (!masterData.categories) masterData.categories = [];
+
+    const isExist = masterData.categories.some(function(cat) {
+        if(cat.includes('|')) {
+            const parts = cat.split('|');
+            return parts[0] === parent && parts[1].toLowerCase() === sub.toLowerCase();
+        }
+        return false;
+    });
+
+    if (!isExist) {
+        masterData.categories.push(value);
+        document.getElementById('new-category-input').value = '';
+        document.getElementById('new-category-desc').value = ''; 
+        renderSettingsLists();
+        showAdminToast('กำลังบันทึกข้อมูล...', 'success');
+        
+        google.script.run.withSuccessHandler(function(res) {
+            if(res && res.status !== 'success') {
+                showAdminToast('ไม่สามารถเซฟลงชีตได้: ' + res.message, 'error');
+            }
+        }).saveMasterData(masterData);
+    } else {
+        showAdminToast('มีหมวดหมู่ย่อยนี้ในหมวดหลักที่เลือกแล้ว', 'warning');
+    }
+}
+
+function renderSettingsLists() {
+    // 1. หมวดหมู่หลัก (Main Categories - แสดงแบบการ์ดคลิกได้)
+    let mainCatHtml = '';
+    if (masterData.mainCategories) {
+        masterData.mainCategories.forEach(function(item) {
+            let catName = item;
+            let catDesc = '';
+            if(item.includes('|')) {
+                const parts = item.split('|');
+                catName = parts[0];
+                catDesc = parts[1];
+            }
+            
+            const isActive = (activeMainCategoryForSetting === catName);
+            const activeClass = isActive ? 'ring-2 ring-[#31c1d7] bg-[#31c1d7]/5 border-[#31c1d7]' : 'bg-white border-slate-200 hover:border-[#31c1d7]/50 hover:shadow-md';
+            
+            mainCatHtml += '<div class="p-4 rounded-2xl shadow-sm border transition-all cursor-pointer flex justify-between items-center mb-3 ' + activeClass + '" onclick="selectSettingMainCategory(\'' + escapeJsString(catName) + '\')">' +
+                '<div class="flex flex-col flex-grow overflow-hidden pr-2">' +
+                    '<span class="text-[15px] font-bold text-slate-800 truncate">' + escapeHtml(catName) + '</span>' +
+                    (catDesc ? '<span class="text-[11px] text-slate-500 mt-1 line-clamp-2 leading-tight">' + escapeHtml(catDesc) + '</span>' : '') +
+                '</div>' +
+                '<button onclick="event.stopPropagation(); deleteMasterDataItem(\'mainCategories\', \'' + escapeJsString(item) + '\')" class="p-2 text-slate-400 hover:text-red-500 flex-shrink-0 ml-2 hover:bg-red-50 rounded-lg transition-colors" title="ลบหมวดหมู่นี้"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>' +
+                '</div>';
+        });
+    }
+    const mainCatContainer = document.getElementById('settings-main-categories-list');
+    if(mainCatContainer) mainCatContainer.innerHTML = mainCatHtml;
+
+    // 2. หมวดหมู่ย่อย (Categories - แสดงตาม Main ที่เลือก)
+    let catHtml = '';
+    const subCatAddContainer = document.getElementById('sub-category-add-container');
+    const subCatHeaderTitle = document.getElementById('sub-category-header-title');
+
+    if (!activeMainCategoryForSetting) {
+        // ถ้ายังไม่ได้คลิกเลือกการ์ดด้านซ้าย ให้ซ่อนกล่องเพิ่มข้อมูล และโชว์ข้อความเตือน
+        if(subCatAddContainer) subCatAddContainer.classList.add('hidden');
+        if(subCatHeaderTitle) subCatHeaderTitle.innerHTML = '🏷️ หมวดหมู่ย่อย';
+        catHtml = '<div class="text-center py-12 px-4 text-slate-400 text-sm font-medium border border-dashed border-slate-200 rounded-2xl bg-white/50 mt-4">กรุณาคลิกเลือกการ์ด <b>หมวดหมู่หลัก</b> ทางซ้ายมือก่อน<br>เพื่อดูและเพิ่มหมวดหมู่ย่อยครับ</div>';
+    } else {
+        // ถ้าเลือกแล้ว ให้เปิดกล่องเพิ่มข้อมูล และอัปเดต Header เป็นชื่อหมวดหลัก
+        if(subCatAddContainer) subCatAddContainer.classList.remove('hidden');
+        if(subCatAddContainer) subCatAddContainer.classList.add('flex');
+        if(subCatHeaderTitle) subCatHeaderTitle.innerHTML = '🏷️ หมวดหมู่ย่อยของ: <span class="text-indigo-600">' + escapeHtml(activeMainCategoryForSetting) + '</span>';
+
+        if (masterData.categories) {
+            const filteredCategories = masterData.categories.filter(function(item) {
+                let parentName = '';
+                if(item.includes('|')) {
+                    parentName = item.split('|')[0];
+                }
+                return parentName === activeMainCategoryForSetting;
+            });
+
+            if(filteredCategories.length === 0) {
+                catHtml = '<div class="text-center py-8 text-sm text-slate-400 font-medium italic border border-dashed border-indigo-200 rounded-2xl mt-4 bg-white/50">ยังไม่มีหมวดหมู่ย่อยในหมวดหมู่นี้<br>พิมพ์ข้อมูลด้านบนแล้วกดเพิ่มได้เลยครับ</div>';
+            } else {
+                filteredCategories.forEach(function(item, idx) {
+                    let subName = escapeHtml(item);
+                    let subDesc = '';
+                    
+                    if(item.includes('|')) {
+                        const parts = item.split('|');
+                        subName = parts[1];
+                        if(parts.length > 2) subDesc = parts[2];
+                    }
+                    
+                    let displayTxt = '<div class="flex items-start">' +
+                                        '<div class="w-6 h-6 rounded-md bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs flex-shrink-0 mt-0.5 mr-3">' + (idx + 1) + '</div>' +
+                                        '<div class="flex flex-col w-full overflow-hidden pr-2">' +
+                                            '<span class="font-bold text-slate-700 text-[14px] truncate">' + escapeHtml(subName) + '</span>' +
+                                            (subDesc ? '<span class="text-xs text-slate-500 mt-1 leading-tight line-clamp-2">' + escapeHtml(subDesc) + '</span>' : '') +
+                                        '</div>' +
+                                     '</div>';
+                    
+                    catHtml += '<div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-start hover:border-indigo-300 transition-colors mb-3">' +
+                        '<div class="w-full overflow-hidden">' + displayTxt + '</div>' +
+                        '<button onclick="deleteMasterDataItem(\'categories\', \'' + escapeJsString(item) + '\')" class="p-1.5 text-slate-400 hover:text-red-500 flex-shrink-0 mt-0.5 hover:bg-red-50 rounded-lg transition-colors" title="ลบหมวดหมู่ย่อยนี้"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>' +
+                        '</div>';
+                });
+            }
+        }
+    }
+    const catContainer = document.getElementById('settings-categories-list');
+    if(catContainer) catContainer.innerHTML = catHtml;
+
+    // 3. แผนก
+    let deptHtml = '';
+    if (masterData.departments) {
+        masterData.departments.forEach(function(item) {
+            const deleteBtn = item === 'ทั้งหมด (All)' ? '' : '<button onclick="deleteMasterDataItem(\'departments\', \'' + escapeJsString(item) + '\')" class="text-red-400 hover:text-red-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>';
+            deptHtml += '<div class="flex justify-between items-center bg-slate-50 px-3 py-2 rounded-lg border border-slate-100 mb-2">' +
+                '<span class="text-sm font-medium text-slate-700">' + escapeHtml(item) + '</span>' + deleteBtn + '</div>';
+        });
+    }
+    const deptContainer = document.getElementById('settings-departments-list');
+    if(deptContainer) deptContainer.innerHTML = deptHtml;
+
+    // 4. ตำแหน่ง
+    let posHtml = '';
+    if (masterData.positions) {
+        masterData.positions.forEach(function(item) {
+            const deleteBtn = item === 'ทั้งหมด (All)' ? '' : '<button onclick="deleteMasterDataItem(\'positions\', \'' + escapeJsString(item) + '\')" class="text-red-400 hover:text-red-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>';
+            posHtml += '<div class="flex justify-between items-center bg-slate-50 px-3 py-2 rounded-lg border border-slate-100 mb-2">' +
+                '<span class="text-sm font-medium text-slate-700">' + escapeHtml(item) + '</span>' + deleteBtn + '</div>';
+        });
+    }
+    const posContainer = document.getElementById('settings-positions-list');
+    if(posContainer) posContainer.innerHTML = posHtml;
+
+    renderMasterDataOptions();
 }
 
 function deleteMasterDataItem(type, value) {
     showCustomConfirm({
         title: 'ยืนยันการลบ',
-        message: 'ต้องการลบ <b>"' + escapeHtml(value) + '"</b> ออกจากระบบใช่หรือไม่?',
+        message: 'ต้องการลบ <b>"' + escapeHtml(value.includes('|') ? value.replace(/\|/g, ' ') : value) + '"</b> ออกจากระบบใช่หรือไม่?',
         type: 'danger',
         confirmText: 'ลบข้อมูล',
         onConfirm: function() {
             masterData[type] = masterData[type].filter(function(item) { return item !== value; });
+            
+            // หากลบหมวดหลักที่กำลังถูกเลือกอยู่ ให้เคลียร์ค่าให้เป็นค่าว่าง (เพื่อให้กล่องขวาถูกซ่อน)
+            if (type === 'mainCategories' && value.includes(activeMainCategoryForSetting)) {
+                activeMainCategoryForSetting = null;
+            }
+            
             renderSettingsLists();
             showAdminToast('กำลังลบข้อมูล...', 'success');
             
@@ -263,20 +405,31 @@ function deleteMasterDataItem(type, value) {
 }
 
 function renderMasterDataOptions() {
-    const catSelect = document.getElementById('lesson-category');
-    const adminFilterSelect = document.getElementById('admin-lesson-category');
+    // 1. หมวดหมู่หลัก (สำหรับหน้า แก้ไขคอร์สเรียน)
+    const mainCatSelect = document.getElementById('lesson-main-category');
     
-    if (masterData.categories) {
-        let catHtml = '<option value="">-- ไม่ระบุหมวดหมู่ --</option>';
-        let filterHtml = '<option value="">ทุกหมวดหมู่</option>';
-        masterData.categories.forEach(function(cat) {
-            catHtml += '<option value="' + escapeHtml(cat) + '">' + escapeHtml(cat) + '</option>';
-            filterHtml += '<option value="' + escapeHtml(cat) + '">' + escapeHtml(cat) + '</option>';
+    if (masterData.mainCategories) {
+        let mainCatHtml = '<option value="">-- เลือกหมวดหมู่หลัก --</option>';
+        masterData.mainCategories.forEach(function(cat) {
+            const catName = cat.includes('|') ? cat.split('|')[0] : cat;
+            mainCatHtml += '<option value="' + escapeHtml(catName) + '">' + escapeHtml(catName) + '</option>';
         });
-        if(catSelect) catSelect.innerHTML = catHtml;
-        if(adminFilterSelect) adminFilterSelect.innerHTML = filterHtml; 
+        if(mainCatSelect) mainCatSelect.innerHTML = mainCatHtml;
     }
 
+    // 2. หมวดหมู่ย่อย (สำหรับช่องค้นหา/Filter คอร์สในหน้า Dashboard ของแอดมิน)
+    const adminFilterSelect = document.getElementById('admin-lesson-category');
+    if (adminFilterSelect && masterData.categories) {
+        let filterHtml = '<option value="">ทุกหมวดหมู่</option>';
+        masterData.categories.forEach(function(cat) {
+            let displayVal = cat;
+            if(cat.includes('|')) displayVal = cat.split('|')[1]; 
+            filterHtml += '<option value="' + escapeHtml(displayVal) + '">' + escapeHtml(displayVal) + '</option>';
+        });
+        adminFilterSelect.innerHTML = filterHtml; 
+    }
+
+    // 3. แผนกและตำแหน่ง
     const deptContainer = document.getElementById('lesson-departments-container');
     const userDeptFilter = document.getElementById('admin-users-dept-filter');
     if (masterData.departments) {
