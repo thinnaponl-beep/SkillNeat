@@ -5,6 +5,37 @@
 
 let dashboardDataList = []; 
 let currentAdminDashView = 'all'; 
+let isPeriodFilterInitialized = false;
+
+function initDashboardPeriodFilter() {
+    if (isPeriodFilterInitialized) return;
+    const selector = document.getElementById('dashboard-period-filter');
+    if (!selector) return;
+
+    const thaiMonths = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+    const d = new Date();
+
+for (let i = 5; i >= 0; i--) {
+        const currentMonth = new Date(d.getFullYear(), d.getMonth() - i, 1);
+        const yearStr = currentMonth.getFullYear();
+        const monthStr = String(currentMonth.getMonth() + 1).padStart(2, '0');
+        const val = `${yearStr}-${monthStr}`;
+        
+        let label = '';
+        if (i === 0) label = '🌟 ข้อมูลเดือนนี้ (' + thaiMonths[currentMonth.getMonth()] + ' ' + (yearStr+543).toString().slice(-2) + ')';
+        else if (i === 1) label = '📅 เดือนที่แล้ว (' + thaiMonths[currentMonth.getMonth()] + ' ' + (yearStr+543).toString().slice(-2) + ')';
+        else label = '📅 ' + thaiMonths[currentMonth.getMonth()] + ' ' + (yearStr+543);
+
+        const option = document.createElement('option');
+        option.value = val;
+        option.textContent = label;
+        selector.insertBefore(option, selector.children[1]); 
+       }
+      const currentMonthVal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    selector.value = currentMonthVal;
+    
+    isPeriodFilterInitialized = true;
+}
 
 function getRankName(score) {
     const numScore = parseInt(score) || 0;
@@ -15,7 +46,10 @@ function getRankName(score) {
     return 'Novice (ผู้เริ่มต้น)';
 }
 
+
 function loadDashboardData() {
+    initDashboardPeriodFilter(); // สร้าง dropdown ตัวเลือกเดือนก่อนทำงาน
+    
     const tbody = document.getElementById('dashboard-table-body');
     const selector = document.getElementById('dashboard-period-filter');
     // ดึงค่าเดือนที่เลือก ถ้าไม่มีให้ใช้ 'all'
@@ -25,7 +59,7 @@ function loadDashboardData() {
     const titleH3 = document.getElementById('dashboard-leaderboard-title');
     if (titleH3 && selector && selector.selectedIndex > -1) {
         const labelText = selector.options[selector.selectedIndex].text;
-        titleH3.innerHTML = '<span class="text-2xl">🏆</span> Top 10 พนักงานคะแนนสะสมสูงสุด (' + labelText + ')';
+        titleH3.innerHTML = '<span class="text-2xl">🏆</span> Top 10 พนักงานคะแนนสะสมสูงสุด (' + labelText.replace('🌟 ', '').replace('📅 ', '') + ')';
     }
 
     if (tbody) {
