@@ -2,6 +2,32 @@
 /* ==========================================
    3. ระบบจัดการบทเรียน (Lessons)
 ========================================== */
+
+function filterSubCategories(selectedValue = '') {
+    const mainCat = document.getElementById('lesson-main-category').value;
+    const subCatSelect = document.getElementById('lesson-category');
+    if(!subCatSelect) return;
+
+    let html = '<option value="">-- ไม่ระบุหมวดย่อย --</option>';
+    
+    if(masterData.categories) {
+        masterData.categories.forEach(cat => {
+            if(cat.includes('|')) {
+                const parts = cat.split('|');
+                // parts[0] = หมวดหลัก, parts[1] = หมวดย่อย, parts[2] = คำอธิบาย (ถ้ามี)
+                if(parts[0] === mainCat) {
+                    html += `<option value="${escapeHtml(parts[1])}">${escapeHtml(parts[1])}</option>`;
+                }
+            } else if (mainCat === '') {
+                html += `<option value="${escapeHtml(cat)}">${escapeHtml(cat)}</option>`;
+            }
+        });
+    }
+    
+    subCatSelect.innerHTML = html;
+    if(selectedValue) subCatSelect.value = selectedValue;
+}
+
 function renderLessonsList() {
     const container = document.getElementById('admin-lessons-list');
     if (!container) return;
@@ -13,7 +39,8 @@ function renderLessonsList() {
 
     const filteredLessons = lessons.filter(function(lesson) {
         const matchKw = lesson.Title.toLowerCase().includes(searchKw);
-        const matchCat = filterCat === '' || lesson.Category === filterCat;
+        // ค้นหาทั้ง MainCategory และ Category
+        const matchCat = filterCat === '' || lesson.Category === filterCat || lesson.MainCategory === filterCat;
         return matchKw && matchCat;
     });
 
@@ -25,6 +52,8 @@ function renderLessonsList() {
     let html = '';
     filteredLessons.forEach(function(lesson) {
         const isActiveStr = lesson.IsActive ? '<span class="text-[10px] bg-[#31c1d7]/10 text-[#31c1d7] px-2 py-0.5 rounded font-bold">เผยแพร่แล้ว</span>' : '<span class="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded font-bold">ซ่อน</span>';
+        
+        const mainCatStr = lesson.MainCategory ? '<span class="text-[10px] border border-blue-200 text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-bold ml-1.5">' + escapeHtml(lesson.MainCategory) + '</span>' : '';
         const categoryStr = lesson.Category ? '<span class="text-[10px] border border-[#31c1d7]/30 text-[#31c1d7] px-2 py-0.5 rounded font-bold ml-1.5">' + escapeHtml(lesson.Category) + '</span>' : '';
         
         let targetInfo = '';
@@ -41,7 +70,7 @@ function renderLessonsList() {
             '<h4 class="font-bold text-slate-800 truncate text-sm">' + escapeHtml(lesson.Title) + '</h4>' +
             targetInfo +
             '<div class="mt-2 flex items-center">' +
-            isActiveStr + categoryStr +
+            isActiveStr + mainCatStr + categoryStr +
             '</div>' +
             '</div>' +
             '<div class="flex space-x-1 ml-3 flex-shrink-0">' +
@@ -79,7 +108,13 @@ function openLessonModal(lessonId) {
         document.getElementById('lesson-title').value = lesson.Title;
         document.getElementById('lesson-desc').value = lesson.Description;
         document.getElementById('lesson-is-active').checked = lesson.IsActive;
-        if(lesson.Category) document.getElementById('lesson-category').value = lesson.Category;
+        
+        // ดึงข้อมูลหมวดหมู่มาแสดง
+        if(lesson.MainCategory) document.getElementById('lesson-main-category').value = lesson.MainCategory;
+        else document.getElementById('lesson-main-category').value = '';
+        
+        // เรียก filter ก่อนเซ็ตค่าหมวดย่อย เพื่อให้ลิสต์ Dropdown ถูกสร้างขึ้นมาให้ตรงหมวด
+        filterSubCategories(lesson.Category || '');
         
         currentEmailTags = (lesson.TargetEmails || '').split(',').map(function(s) { return s.trim().toLowerCase(); }).filter(Boolean);
         renderEmailTags();
@@ -102,6 +137,9 @@ function openLessonModal(lessonId) {
     } else {
         document.getElementById('lesson-id').value = '';
         document.getElementById('lesson-is-active').checked = true;
+        document.getElementById('lesson-main-category').value = '';
+        
+        filterSubCategories(); 
         
         const firstDept = document.querySelector('input[name="target-dept"][value="ทั้งหมด (All)"]');
         if(firstDept) firstDept.checked = true;
@@ -132,6 +170,7 @@ function saveLesson(e) {
         LessonID: document.getElementById('lesson-id').value,
         Title: document.getElementById('lesson-title').value,
         Description: document.getElementById('lesson-desc').value,
+        MainCategory: document.getElementById('lesson-main-category').value, 
         Category: document.getElementById('lesson-category').value,
         IsActive: document.getElementById('lesson-is-active').checked,
         TargetDepartments: selectedDepts.join(', '),
