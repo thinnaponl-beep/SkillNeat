@@ -3,109 +3,126 @@
    6. ระบบจัดการพนักงาน (Users)
 ========================================== */
 function renderUsersList() {
-    const container = document.getElementById('admin-users-list');
-    if (!container) return;
+    try {
+        const container = document.getElementById('admin-users-list');
+        if (!container) return;
 
-    let filterContainer = document.getElementById('admin-users-filter-container');
-    if (!filterContainer) {
-        const wrapper = container.closest('.overflow-x-auto');
-        if (wrapper) {
-            const filterHtml = `
-            <div id="admin-users-filter-container" class="flex flex-col md:flex-row gap-3 mb-4 w-full">
-                <div class="relative flex-grow">
-                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                    </div>
-                    <input type="text" id="admin-user-search-val" placeholder="ค้นหาชื่อ, อีเมล..." class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-[#31c1d7] outline-none">
-                </div>
-                <select id="admin-user-dept-val" class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 focus:ring-2 focus:ring-[#31c1d7] outline-none min-w-[160px]">
-                    <option value="">ทุกแผนก</option>
-                </select>
-                <select id="admin-user-pos-val" class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 focus:ring-2 focus:ring-[#31c1d7] outline-none min-w-[160px]">
-                    <option value="">ทุกตำแหน่ง</option>
-                </select>
-            </div>`;
-            wrapper.insertAdjacentHTML('beforebegin', filterHtml);
-            
-            document.getElementById('admin-user-search-val').addEventListener('input', renderUsersList);
-            document.getElementById('admin-user-dept-val').addEventListener('change', renderUsersList);
-            document.getElementById('admin-user-pos-val').addEventListener('change', renderUsersList);
-        }
-    }
-
-    const deptSelect = document.getElementById('admin-user-dept-val');
-    if (deptSelect && deptSelect.options.length <= 1 && masterData && masterData.departments) {
-        masterData.departments.forEach(d => {
-            if (d !== 'ทั้งหมด (All)') deptSelect.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`);
-        });
-    }
-    const posSelect = document.getElementById('admin-user-pos-val');
-    if (posSelect && posSelect.options.length <= 1 && masterData && masterData.positions) {
-        masterData.positions.forEach(p => {
-            if (p !== 'ทั้งหมด (All)') posSelect.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`);
-        });
-    }
-
-    const searchKw = document.getElementById('admin-user-search-val') ? document.getElementById('admin-user-search-val').value.toLowerCase().trim() : '';
-    const filterDept = document.getElementById('admin-user-dept-val') ? document.getElementById('admin-user-dept-val').value : '';
-    const filterPos = document.getElementById('admin-user-pos-val') ? document.getElementById('admin-user-pos-val').value : '';
-
-    const filteredUsers = users.filter(u => {
-        const matchKw = searchKw === '' || 
-                        (u.FullName && u.FullName.toLowerCase().includes(searchKw)) || 
-                        (u.Email && u.Email.toLowerCase().includes(searchKw)) ||
-                        (u.Nickname && u.Nickname.toLowerCase().includes(searchKw));
-        
-        const uDept = (u.Department && u.Department !== 'General') ? u.Department : 'ส่วนกลาง';
-        const matchDept = filterDept === '' || uDept === filterDept;
-        
-        const uPos = u.Position || 'พนักงานทั่วไป';
-        const matchPos = filterPos === '' || uPos === filterPos;
-        
-        return matchKw && matchDept && matchPos;
-    });
-
-    if (filteredUsers.length === 0) {
-        container.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">ไม่พบข้อมูลพนักงานที่ค้นหา</td></tr>';
-        return;
-    }
-
-    let html = '';
-    filteredUsers.forEach(function(u) {
-        const img = u.ProfileImage || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(u.Nickname || u.Email) + '&background=31c1d7&color=fff';
-        const fullName = u.FullName || 'ยังไม่ระบุชื่อ';
-        const nickName = u.Nickname || '-';
-        const dept = u.Department && u.Department !== 'General' ? u.Department : 'ส่วนกลาง';
-        const pos = u.Position || 'พนักงานทั่วไป';
-        const manualBN = u.ManualBN || 0;
-
-        html += '<tr class="hover:bg-slate-50 transition-colors">' +
-            '<td class="py-3 px-4 border-b border-slate-100">' +
-                '<div class="flex items-center space-x-3">' +
-                    '<img src="' + escapeHtml(img) + '" class="w-10 h-10 rounded-xl object-cover shadow-sm">' +
-                    '<div>' +
-                        '<p class="text-sm font-bold text-slate-800">' + escapeHtml(fullName) + '</p>' +
-                        '<p class="text-xs text-slate-500">ชื่อเล่น: ' + escapeHtml(nickName) + '</p>' +
+        // สร้างกล่องค้นหาและตัวกรอง (ถ้ายังไม่มี)
+        let filterContainer = document.getElementById('admin-users-filter-container');
+        if (!filterContainer) {
+            const wrapper = container.closest('.overflow-x-auto');
+            if (wrapper) {
+                const filterHtml = '<div id="admin-users-filter-container" class="flex flex-col md:flex-row gap-3 mb-4 w-full">' +
+                    '<div class="relative flex-grow">' +
+                        '<div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">' +
+                            '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>' +
+                        '</div>' +
+                        '<input type="text" id="admin-user-search-val" placeholder="ค้นหาชื่อ, อีเมลพนักงาน..." class="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-[#31c1d7] outline-none transition-all font-medium text-slate-700 shadow-sm">' +
                     '</div>' +
-                '</div>' +
-            '</td>' +
-            '<td class="py-3 px-4 border-b border-slate-100 text-sm text-slate-600 font-mono">' + escapeHtml(u.Email) + '</td>' +
-            '<td class="py-3 px-4 border-b border-slate-100 text-sm">' +
-                '<span class="px-2.5 py-1 bg-[#31c1d7]/10 text-[#31c1d7] border border-[#31c1d7]/20 rounded-md font-medium text-xs">' + escapeHtml(dept) + '</span>' +
-            '</td>' +
-            '<td class="py-3 px-4 border-b border-slate-100 text-sm text-slate-700">' + escapeHtml(pos) + '</td>' +
-            '<td class="py-3 px-4 border-b border-slate-100 text-center font-bold text-amber-500">' + new Intl.NumberFormat().format(manualBN) + '</td>' +
-            '<td class="py-3 px-4 border-b border-slate-100 text-center">' +
-                '<button onclick="openUserModal(\'' + escapeHtml(u.Email) + '\')" class="text-[#31c1d7] hover:bg-[#31c1d7]/10 border border-transparent hover:border-[#31c1d7]/30 px-3 py-1.5 rounded-lg transition-colors inline-flex items-center text-xs font-bold shadow-sm">' +
-                    '<svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg> แก้ไข' +
-                '</button>' +
-                '<button onclick="openManualScoreModal(\'' + escapeHtml(u.Email) + '\')" class="text-amber-500 hover:bg-amber-50 border border-transparent hover:border-amber-200 px-3 py-1.5 rounded-lg transition-colors inline-flex items-center text-xs font-bold shadow-sm ml-2">' +
-                    '✨ ให้คะแนน' +
-                '</button>' +
-            '</td>' +
-        '</tr>';
-    });
-    container.innerHTML = html;
+                    '<select id="admin-user-dept-val" class="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 focus:ring-2 focus:ring-[#31c1d7] outline-none min-w-[160px] transition-all cursor-pointer shadow-sm">' +
+                        '<option value="">ทุกแผนก</option>' +
+                    '</select>' +
+                    '<select id="admin-user-pos-val" class="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 focus:ring-2 focus:ring-[#31c1d7] outline-none min-w-[160px] transition-all cursor-pointer shadow-sm">' +
+                        '<option value="">ทุกตำแหน่ง</option>' +
+                    '</select>' +
+                '</div>';
+                wrapper.insertAdjacentHTML('beforebegin', filterHtml);
+                
+                document.getElementById('admin-user-search-val').addEventListener('input', renderUsersList);
+                document.getElementById('admin-user-dept-val').addEventListener('change', renderUsersList);
+                document.getElementById('admin-user-pos-val').addEventListener('change', renderUsersList);
+            }
+        }
+
+        // เติมตัวเลือกแผนกและตำแหน่ง (ถ้ายังไม่มี)
+        const deptSelect = document.getElementById('admin-user-dept-val');
+        if (deptSelect && deptSelect.options.length <= 1 && masterData && masterData.departments) {
+            masterData.departments.forEach(function(d) {
+                if (d !== 'ทั้งหมด (All)') deptSelect.insertAdjacentHTML('beforeend', '<option value="' + escapeHtml(d) + '">' + escapeHtml(d) + '</option>');
+            });
+        }
+        const posSelect = document.getElementById('admin-user-pos-val');
+        if (posSelect && posSelect.options.length <= 1 && masterData && masterData.positions) {
+            masterData.positions.forEach(function(p) {
+                if (p !== 'ทั้งหมด (All)') posSelect.insertAdjacentHTML('beforeend', '<option value="' + escapeHtml(p) + '">' + escapeHtml(p) + '</option>');
+            });
+        }
+
+        // ดึงค่าการค้นหาปัจจุบัน
+        const searchInput = document.getElementById('admin-user-search-val');
+        const deptInput = document.getElementById('admin-user-dept-val');
+        const posInput = document.getElementById('admin-user-pos-val');
+        
+        const searchKw = searchInput ? String(searchInput.value).toLowerCase().trim() : '';
+        const filterDept = deptInput ? deptInput.value : '';
+        const filterPos = posInput ? posInput.value : '';
+
+        // กรองข้อมูลพนักงาน (ใช้ String ป้องกัน Error จากข้อมูลว่าง)
+        const filteredUsers = users.filter(function(u) {
+            const fName = String(u.FullName || '').toLowerCase();
+            const eMail = String(u.Email || '').toLowerCase();
+            const nName = String(u.Nickname || '').toLowerCase();
+            
+            const matchKw = searchKw === '' || fName.includes(searchKw) || eMail.includes(searchKw) || nName.includes(searchKw);
+            
+            const uDept = (u.Department && u.Department !== 'General') ? u.Department : 'ส่วนกลาง';
+            const matchDept = filterDept === '' || uDept === filterDept;
+            
+            const uPos = u.Position || 'พนักงานทั่วไป';
+            const matchPos = filterPos === '' || uPos === filterPos;
+            
+            return matchKw && matchDept && matchPos;
+        });
+
+        if (filteredUsers.length === 0) {
+            container.innerHTML = '<tr><td colspan="5" class="py-12 text-center text-slate-400 bg-slate-50/50 border border-dashed border-slate-200 rounded-2xl"><div class="text-3xl mb-2 opacity-50">🔍</div>ไม่พบข้อมูลพนักงานที่ค้นหา</td></tr>';
+            return;
+        }
+
+        // สร้าง HTML ตาราง
+        let html = '';
+        filteredUsers.forEach(function(user) {
+            const safeEmail = escapeJsString(String(user.Email || ''));
+            const emailPrefix = safeEmail.split('@')[0] || 'User';
+            const img = user.ProfileImage || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.Nickname || emailPrefix) + '&background=31c1d7&color=fff';
+            const fullName = user.FullName || 'ยังไม่ระบุชื่อ';
+            const nickName = user.Nickname || '-';
+            const dept = user.Department && user.Department !== 'General' ? user.Department : 'ส่วนกลาง';
+            const pos = user.Position || 'พนักงานทั่วไป';
+            
+            html += '<tr class="hover:bg-slate-50/80 transition-colors group border-b border-slate-100 last:border-0">' +
+                '<td class="py-4 px-4">' +
+                    '<div class="flex items-center gap-4">' +
+                        '<img src="' + escapeHtml(img) + '" class="w-10 h-10 rounded-full object-cover shadow-sm ring-2 ring-white group-hover:ring-[#31c1d7]/20 transition-all">' +
+                        '<div>' +
+                            '<p class="text-sm font-bold text-slate-800">' + escapeHtml(fullName) + '</p>' +
+                            '<p class="text-[11px] text-slate-500 font-medium">ชื่อเล่น: <span class="text-slate-700">' + escapeHtml(nickName) + '</span></p>' +
+                        '</div>' +
+                    '</div>' +
+                '</td>' +
+                '<td class="py-4 px-4 text-slate-500 font-mono text-[11px]">' + escapeHtml(user.Email) + '</td>' +
+                '<td class="py-4 px-4"><span class="px-3 py-1.5 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-lg text-[11px] font-bold shadow-sm">' + escapeHtml(dept) + '</span></td>' +
+                '<td class="py-4 px-4"><span class="px-3 py-1.5 bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-[11px] font-bold shadow-sm">' + escapeHtml(pos) + '</span></td>' +
+                '<td class="py-4 px-4 text-center">' +
+                    '<div class="flex items-center justify-center gap-2 opacity-90 group-hover:opacity-100 transition-opacity">' +
+                        '<button onclick="openUserModal(\'' + safeEmail + '\')" class="p-2 bg-white text-[#31c1d7] hover:bg-[#31c1d7]/10 border border-slate-200 hover:border-[#31c1d7]/30 rounded-xl transition-all shadow-sm" title="แก้ไขข้อมูลพื้นฐาน">' +
+                            '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>' +
+                        '</button>' +
+                        '<button onclick="promptManualScore(\'' + safeEmail + '\')" class="p-2 bg-white text-amber-500 hover:bg-amber-50 border border-slate-200 hover:border-amber-200 rounded-xl transition-all shadow-sm" title="ให้คะแนนพิเศษ (+/-)">' +
+                            '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>' +
+                        '</button>' +
+                        '<button onclick="showUserScoreLog(\'' + safeEmail + '\')" class="p-2 bg-white text-indigo-500 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 rounded-xl transition-all shadow-sm" title="ดูประวัติการให้คะแนน (Log)">' +
+                            '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>' +
+                        '</button>' +
+                    '</div>' +
+                '</td>' +
+            '</tr>';
+        });
+        
+        container.innerHTML = html;
+    } catch(err) {
+        console.error('Error rendering users list:', err);
+    }
 }
 
 function openUserModal(email) {
@@ -116,9 +133,6 @@ function openUserModal(email) {
     document.getElementById('user-email-display').value = user.Email;
     document.getElementById('user-fullname').value = user.FullName || '';
     document.getElementById('user-nickname').value = user.Nickname || '';
-    
-    const manualBNInput = document.getElementById('user-manual-bn');
-    if (manualBNInput) manualBNInput.value = user.ManualBN || 0;
     
     const deptSelect = document.getElementById('user-department');
     const posSelect = document.getElementById('user-position');
@@ -135,17 +149,12 @@ function saveUser(e) {
     saveBtn.disabled = true;
     saveBtn.innerHTML = 'กำลังบันทึก...';
 
-    let manualBnVal = 0;
-    const mbInput = document.getElementById('user-manual-bn');
-    if (mbInput) manualBnVal = parseInt(mbInput.value) || 0;
-
     const userData = {
         Email: document.getElementById('user-email-hidden').value,
         FullName: document.getElementById('user-fullname').value.trim(),
         Nickname: document.getElementById('user-nickname').value.trim(),
         Department: document.getElementById('user-department').value,
-        Position: document.getElementById('user-position').value,
-        ManualBN: manualBnVal 
+        Position: document.getElementById('user-position').value
     };
 
     google.script.run
@@ -159,11 +168,10 @@ function saveUser(e) {
                     users[idx].Nickname = userData.Nickname;
                     users[idx].Department = userData.Department;
                     users[idx].Position = userData.Position;
-                    users[idx].ManualBN = userData.ManualBN;
                 }
                 
                 renderUsersList();
-                showAdminToast('บันทึกข้อมูลและคะแนนเรียบร้อยแล้ว');
+                showAdminToast('บันทึกข้อมูลส่วนตัวเรียบร้อยแล้ว');
                 saveBtn.disabled = false;
                 saveBtn.innerHTML = 'บันทึกข้อมูล';
             } else {
@@ -175,43 +183,43 @@ function saveUser(e) {
         .saveUserAdmin(userData);
 }
 
-function openManualScoreModal(email) {
+function promptManualScore(email) {
     let form = document.getElementById('manual-score-form');
     
     if (!form) {
-        const modalHtml = `
-        <div id="manual-score-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden z-[200] flex justify-center items-center p-4 transition-opacity">
-            <form id="manual-score-form" class="bg-white rounded-3xl w-full max-w-md shadow-xl overflow-hidden" onsubmit="saveManualScore(event)">
-                <div class="px-6 py-5 border-b border-slate-100 bg-white flex justify-between items-center">
-                    <div class="flex items-center gap-3">
-                        <span class="text-2xl">✨</span>
-                        <h3 class="text-2xl font-extrabold text-slate-800">เพิ่ม/ลด คะแนนพิเศษ</h3>
-                    </div>
-                    <button type="button" onclick="closeModals()" class="text-slate-400 hover:text-red-500 bg-slate-50 hover:bg-red-50 rounded-full w-8 h-8 flex items-center justify-center font-bold transition-colors">&times;</button>
-                </div>
-                <div class="p-6 bg-slate-50/50 space-y-4">
-                    <div>
-                        <label class="block text-sm font-bold text-slate-700 mb-1">อีเมลพนักงาน</label>
-                        <input type="text" id="manual-score-email" disabled class="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-slate-500 font-mono text-sm cursor-not-allowed">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-bold text-slate-700 mb-1">จำนวนคะแนน (BN) <span class="text-red-500">*</span></label>
-                        <input type="number" id="manual-score-points" required placeholder="เช่น 100 (ใส่ค่าติดลบเพื่อหักคะแนน)" class="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#31c1d7] outline-none font-bold text-lg text-slate-800">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-bold text-slate-700 mb-1">หมายเหตุ / เหตุผล <span class="text-red-500">*</span></label>
-                        <textarea id="manual-score-reason" required rows="2" placeholder="เช่น ย้ายข้อมูลจากระบบเดิม หรือ อ่านหนังสือประจำเดือน..." class="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#31c1d7] outline-none custom-scrollbar text-sm"></textarea>
-                    </div>
-                    <div class="bg-amber-50 p-3 rounded-xl border border-amber-100">
-                        <p class="text-xs text-amber-700 font-medium">⚠️ คะแนนที่บันทึกจะไปแสดงในยอดรวมของเดือนนี้โดยอัตโนมัติ และจะมีการบันทึกประวัติผู้ทำรายการเก็บไว้</p>
-                    </div>
-                </div>
-                <div class="px-6 py-4 bg-white border-t border-slate-100 flex justify-end space-x-3">
-                    <button type="button" onclick="closeModals()" class="px-5 py-2.5 bg-slate-50 text-slate-700 font-bold rounded-xl hover:bg-slate-100 transition-colors">ยกเลิก</button>
-                    <button type="submit" id="save-manual-score-btn" class="px-6 py-2.5 bg-slate-800 text-white font-bold rounded-xl shadow-sm hover:bg-slate-900 transition-all">บันทึกคะแนน</button>
-                </div>
-            </form>
-        </div>`;
+        const modalHtml = '<div id="manual-score-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden z-[200] flex justify-center items-center p-4 transition-opacity">' +
+            '<form id="manual-score-form" class="bg-white rounded-3xl w-full max-w-md shadow-xl overflow-hidden" onsubmit="saveManualScore(event)">' +
+                '<div class="px-6 py-5 border-b border-slate-100 bg-white flex justify-between items-center">' +
+                    '<div class="flex items-center gap-3">' +
+                        '<span class="text-2xl">✨</span>' +
+                        '<h3 class="text-2xl font-extrabold text-slate-800">เพิ่ม/ลด คะแนนพิเศษ</h3>' +
+                    '</div>' +
+                    '<button type="button" onclick="closeModals()" class="text-slate-400 hover:text-red-500 bg-slate-50 hover:bg-red-50 rounded-full w-8 h-8 flex items-center justify-center font-bold transition-colors">&times;</button>' +
+                '</div>' +
+                '<div class="p-6 bg-slate-50/50 space-y-4">' +
+                    '<div>' +
+                        '<label class="block text-sm font-bold text-slate-700 mb-1">อีเมลพนักงาน</label>' +
+                        '<input type="text" id="manual-score-email" disabled class="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-slate-500 font-mono text-sm cursor-not-allowed">' +
+                    '</div>' +
+                    '<div>' +
+                        '<label class="block text-sm font-bold text-slate-700 mb-1">จำนวนคะแนน (BN) <span class="text-red-500">*</span></label>' +
+                        '<input type="number" id="manual-score-points" required placeholder="เช่น 100 (ใส่ค่าติดลบเพื่อหักคะแนน)" class="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#31c1d7] outline-none font-bold text-lg text-slate-800 shadow-sm">' +
+                    '</div>' +
+                    '<div>' +
+                        '<label class="block text-sm font-bold text-slate-700 mb-1">หมายเหตุ / เหตุผล <span class="text-red-500">*</span></label>' +
+                        '<textarea id="manual-score-reason" required rows="2" placeholder="เช่น ย้ายข้อมูลจากระบบเดิม หรือ อ่านหนังสือประจำเดือน..." class="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#31c1d7] outline-none custom-scrollbar text-sm shadow-sm"></textarea>' +
+                    '</div>' +
+                    '<div class="bg-amber-50 p-4 rounded-xl border border-amber-100 flex gap-3">' +
+                        '<span class="text-xl">⚠️</span>' +
+                        '<p class="text-xs text-amber-700 font-medium leading-relaxed">คะแนนที่บันทึกจะไปแสดงในยอดรวมของเดือนนี้โดยอัตโนมัติ และจะมีการบันทึกประวัติผู้ทำรายการเก็บไว้</p>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="px-6 py-4 bg-white border-t border-slate-100 flex justify-end space-x-3">' +
+                    '<button type="button" onclick="closeModals()" class="px-5 py-2.5 bg-slate-50 text-slate-700 font-bold rounded-xl hover:bg-slate-100 transition-colors">ยกเลิก</button>' +
+                    '<button type="submit" id="save-manual-score-btn" class="px-6 py-2.5 bg-slate-800 text-white font-bold rounded-xl shadow-sm hover:bg-slate-900 transition-all">บันทึกคะแนน</button>' +
+                '</div>' +
+            '</form>' +
+        '</div>';
         document.body.insertAdjacentHTML('beforeend', modalHtml);
         form = document.getElementById('manual-score-form');
     }
@@ -238,7 +246,16 @@ function saveManualScore(e) {
             if(res.status === 'success') {
                 showAdminToast('เพิ่มคะแนนพิเศษสำเร็จ!');
                 closeModals();
-                loadDashboardData(); 
+                
+                // รีเฟรชตารางใหม่
+                google.script.run.withSuccessHandler(function(newData) {
+                    if (newData && newData.users) {
+                        users = newData.users;
+                        renderUsersList();
+                    }
+                }).getAdminData();
+                
+                if(typeof loadDashboardData === 'function') loadDashboardData(); 
             } else {
                 showAdminToast(res.message, 'error');
             }
@@ -246,5 +263,76 @@ function saveManualScore(e) {
             btn.innerText = 'บันทึกคะแนน';
         })
         .adminAddManualScore(data);
+}
+
+function showUserScoreLog(email) {
+    let modal = document.getElementById('user-score-log-modal');
+    
+    // สร้าง Modal ถ้ายังไม่มี
+    if (!modal) {
+        const modalHtml = '<div id="user-score-log-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden z-[200] flex justify-center items-center p-4 transition-opacity">' +
+            '<div class="bg-white rounded-3xl w-full max-w-3xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col">' +
+                '<div class="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-white">' +
+                    '<div>' +
+                        '<h3 class="text-xl sm:text-2xl font-extrabold text-slate-800">ประวัติคะแนนพิเศษ (Log)</h3>' +
+                        '<p id="score-log-user-email" class="text-sm text-indigo-500 font-mono mt-1 bg-indigo-50 px-2 py-0.5 rounded-md inline-block"></p>' +
+                    '</div>' +
+                    '<button type="button" onclick="closeModals()" class="text-slate-400 hover:text-red-500 bg-slate-50 hover:bg-red-50 rounded-full w-8 h-8 flex items-center justify-center font-bold transition-colors">&times;</button>' +
+                '</div>' +
+                '<div class="p-6 overflow-y-auto custom-scrollbar flex-grow bg-slate-50/50">' +
+                    '<div class="w-full overflow-hidden bg-white rounded-2xl border border-slate-200 shadow-sm">' +
+                        '<table class="w-full text-left text-sm whitespace-nowrap">' +
+                            '<thead>' +
+                                '<tr class="text-slate-500 border-b border-slate-200 bg-slate-50 uppercase text-[10px] tracking-wider">' +
+                                    '<th class="py-3 px-4 font-bold">วันที่ / เวลา</th>' +
+                                    '<th class="py-3 px-4 font-bold text-center">คะแนน</th>' +
+                                    '<th class="py-3 px-4 font-bold">เหตุผล / รายละเอียด</th>' +
+                                    '<th class="py-3 px-4 font-bold">ผู้ทำรายการ</th>' +
+                                '</tr>' +
+                            '</thead>' +
+                            '<tbody id="user-score-log-content" class="divide-y divide-slate-100 text-slate-700">' +
+                                '<!-- Data injected via JS -->' +
+                            '</tbody>' +
+                        '</table>' +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        modal = document.getElementById('user-score-log-modal');
+    }
+
+    const content = document.getElementById('user-score-log-content');
+    document.getElementById('score-log-user-email').textContent = email;
+    
+    content.innerHTML = '<tr><td colspan="4" class="py-12 text-center text-slate-500"><svg class="animate-spin h-6 w-6 mx-auto text-[#31c1d7] mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>กำลังดึงประวัติคะแนน...</td></tr>';
+    modal.classList.remove('hidden');
+    
+    google.script.run
+        .withSuccessHandler(function(res) {
+            if(res.status === 'success') {
+                if(res.logs.length === 0) {
+                    content.innerHTML = '<tr><td colspan="4" class="py-12 text-center bg-white"><div class="text-4xl mb-3 opacity-20">📭</div><p class="text-slate-400 font-medium">ไม่พบประวัติการให้คะแนนพิเศษ</p></td></tr>';
+                } else {
+                    let html = '';
+                    res.logs.forEach(function(log) {
+                        const pts = parseInt(log.points);
+                        const ptsClass = pts >= 0 ? 'text-emerald-600 bg-emerald-50 border border-emerald-100' : 'text-rose-600 bg-rose-50 border border-rose-100';
+                        const ptsSign = pts >= 0 ? '+' : '';
+                        
+                        html += '<tr class="hover:bg-slate-50/50 transition-colors">' +
+                            '<td class="py-4 px-4 text-slate-500 font-mono text-[11px]">' + escapeHtml(log.timestamp) + '</td>' +
+                            '<td class="py-4 px-4 text-center"><span class="px-2.5 py-1 rounded-lg font-black text-xs shadow-sm ' + ptsClass + '">' + ptsSign + pts + ' BN</span></td>' +
+                            '<td class="py-4 px-4 text-slate-700 text-sm whitespace-normal min-w-[200px] leading-relaxed font-medium">' + escapeHtml(log.reason) + '</td>' +
+                            '<td class="py-4 px-4 text-slate-400 text-[10px] font-mono">' + escapeHtml(log.adminEmail) + '</td>' +
+                        '</tr>';
+                    });
+                    content.innerHTML = html;
+                }
+            } else {
+                content.innerHTML = '<tr><td colspan="4" class="py-8 text-center text-rose-500 font-bold">❌ เกิดข้อผิดพลาด: ' + escapeHtml(res.message) + '</td></tr>';
+            }
+        })
+        .getUserManualScoreLogs(email);
 }
 </script>
