@@ -6,6 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <!-- JAVIS ADDED: ไลบรารี SortableJS สำหรับลากและวาง (Drag & Drop) -->
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
   <?!= include('Global_CSS'); ?>
   <style>
     .checkbox-group-scroll { max-height: 140px; overflow-y: auto; }
@@ -15,6 +17,11 @@
     /* เอฟเฟกต์เพิ่มเติมสำหรับ Leaderboard */
     .leaderboard-card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
     .leaderboard-card:hover { transform: translateY(-4px); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05); }
+    
+    /* สไตล์คลาสตอนลาก (Drag) หมวดหมู่ */
+    .sortable-ghost { opacity: 0.4; background-color: #f8fafc; }
+    .drag-handle { cursor: grab; }
+    .drag-handle:active { cursor: grabbing; }
   </style>
 </head>
 <body class="bg-slate-50 font-sans min-h-screen flex flex-col">
@@ -36,22 +43,11 @@
     </header>
     
     <div class="mb-8 bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200 inline-flex overflow-x-auto no-scrollbar max-w-full">
-        <button onclick="switchAdminTab('manage')" id="tab-manage" class="whitespace-nowrap py-2.5 px-6 rounded-xl font-bold text-sm transition-all bg-[#31c1d7]/10 text-[#31c1d7] flex items-center">
-            📚 จัดการคอร์สเรียน
-        </button>
-        <button onclick="switchAdminTab('users')" id="tab-users" class="whitespace-nowrap py-2.5 px-6 rounded-xl font-bold text-sm transition-all text-slate-500 hover:text-slate-800 hover:bg-slate-50 flex items-center">
-            👥 จัดการพนักงาน
-        </button>
-        <button onclick="switchAdminTab('settings')" id="tab-settings" class="whitespace-nowrap py-2.5 px-6 rounded-xl font-bold text-sm transition-all text-slate-500 hover:text-slate-800 hover:bg-slate-50 flex items-center">
-            ⚙️ ตั้งค่าระบบ (แผนก/หมวดหมู่)
-        </button>
-        <button onclick="switchAdminTab('approvals')" id="tab-approvals" class="whitespace-nowrap py-2.5 px-6 rounded-xl font-bold text-sm transition-all text-slate-500 hover:text-slate-800 hover:bg-slate-50 flex items-center">
-            ✅ ตรวจสอบหลักฐาน
-            <span id="pending-badge" class="hidden ml-2 bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full font-black shadow-sm">0</span>
-        </button>
-        <button onclick="switchAdminTab('dashboard')" id="tab-dashboard" class="whitespace-nowrap py-2.5 px-6 rounded-xl font-bold text-sm transition-all text-slate-500 hover:text-slate-800 hover:bg-slate-50 flex items-center">
-            📊 รายงานผู้เรียน
-        </button>
+        <button onclick="switchAdminTab('manage')" id="tab-manage" class="whitespace-nowrap py-2.5 px-6 rounded-xl font-bold text-sm transition-all bg-[#31c1d7]/10 text-[#31c1d7] flex items-center">📚 จัดการคอร์สเรียน</button>
+        <button onclick="switchAdminTab('users')" id="tab-users" class="whitespace-nowrap py-2.5 px-6 rounded-xl font-bold text-sm transition-all text-slate-500 hover:text-slate-800 hover:bg-slate-50 flex items-center">👥 จัดการพนักงาน</button>
+        <button onclick="switchAdminTab('settings')" id="tab-settings" class="whitespace-nowrap py-2.5 px-6 rounded-xl font-bold text-sm transition-all text-slate-500 hover:text-slate-800 hover:bg-slate-50 flex items-center">⚙️ ตั้งค่าระบบ (แผนก/หมวดหมู่)</button>
+        <button onclick="switchAdminTab('approvals')" id="tab-approvals" class="whitespace-nowrap py-2.5 px-6 rounded-xl font-bold text-sm transition-all text-slate-500 hover:text-slate-800 hover:bg-slate-50 flex items-center">✅ ตรวจสอบหลักฐาน <span id="pending-badge" class="hidden ml-2 bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full font-black shadow-sm">0</span></button>
+        <button onclick="switchAdminTab('dashboard')" id="tab-dashboard" class="whitespace-nowrap py-2.5 px-6 rounded-xl font-bold text-sm transition-all text-slate-500 hover:text-slate-800 hover:bg-slate-50 flex items-center">📊 รายงานผู้เรียน</button>
     </div>
 
     <!-- แท็บ 1: จัดการเนื้อหาบทเรียน -->
@@ -124,7 +120,7 @@
                             <th class="py-3 px-4 rounded-tl-xl font-bold">พนักงาน</th>
                             <th class="py-3 px-4 font-bold">อีเมล</th>
                             <th class="py-3 px-4 font-bold">แผนก</th>
-                            <th class="py-3 px-4 font-bold">ตำแหน่ง</th>
+                            <th class="py-3 px-4 font-bold">ตำแหน่ง / ระดับ</th>
                             <th class="py-3 px-4 rounded-tr-xl font-bold text-center">จัดการ</th>
                         </tr>
                     </thead>
@@ -134,10 +130,10 @@
         </div>
     </div>
 
-    <!-- แท็บ 3: ตั้งค่าระบบ (ปรับโครงสร้างหมวดหมู่แบบเลือกการ์ด) -->
+    <!-- แท็บ 3: ตั้งค่าระบบ -->
     <div id="settings-content" class="hidden animate-fade-slide-up flex-grow">
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <!-- 1. หมวดหมู่หลัก (JAVIS EDITED: แสดงแบบการ์ดเหมือนคอร์สเรียน) -->
+            <!-- 1. หมวดหมู่หลัก (Main Category) -->
             <div class="bg-white rounded-3xl shadow-sm border border-slate-200 flex flex-col h-[70vh] overflow-hidden">
                 <div class="p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col gap-3">
                     <h3 class="text-lg font-bold text-slate-800">📁 หมวดหมู่หลัก</h3>
@@ -153,7 +149,7 @@
                 <div id="settings-main-categories-list" class="p-4 space-y-3 overflow-y-auto custom-scrollbar flex-grow bg-slate-50/50"></div>
             </div>
             
-            <!-- 2. หมวดหมู่ย่อย (JAVIS EDITED: ลบ Dropdown เลือกหมวดหลัก เพราะผูกกับการคลิกการ์ดแล้ว) -->
+            <!-- 2. หมวดหมู่ย่อย (Sub Category) -->
             <div class="bg-white rounded-3xl shadow-sm border border-slate-200 flex flex-col h-[70vh] overflow-hidden">
                 <div class="p-5 border-b border-indigo-100 bg-indigo-50/50 flex flex-col gap-3">
                     <h3 id="sub-category-header-title" class="text-lg font-bold text-slate-800">🏷️ หมวดหมู่ย่อย</h3>
@@ -164,12 +160,15 @@
                              <input type="text" id="new-category-desc" placeholder="คำอธิบายย่อย (ไม่บังคับ)..." class="flex-grow px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#31c1d7] outline-none text-sm">
                              <button onclick="addSubCategory()" class="bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-900 transition-colors">เพิ่ม</button>
                         </div>
+                        <div class="mt-2 text-center text-[10px] text-indigo-500 font-bold bg-white rounded-lg py-1 border border-indigo-100">
+                            💡 คุณสามารถ "คลิกค้าง" ที่ไอคอน ☰ ในรายการด้านล่าง เพื่อลากจัดลำดับได้เลย
+                        </div>
                     </div>
                 </div>
                 <div id="settings-categories-list" class="p-4 space-y-3 overflow-y-auto custom-scrollbar flex-grow bg-slate-50/50"></div>
             </div>
             
-            <!-- 3. แผนก (ห้ามยุ่งตามสั่ง) -->
+            <!-- 3. แผนก -->
             <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
                 <h3 class="text-lg font-bold text-slate-800 mb-2">🏢 แผนก (Departments)</h3>
                 <p class="text-xs text-slate-500 mb-4">ระบุรายชื่อแผนกที่มีในองค์กรของคุณ</p>
@@ -180,12 +179,12 @@
                 <div id="settings-departments-list" class="space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar pr-2"></div>
             </div>
             
-            <!-- 4. ตำแหน่ง (ห้ามยุ่งตามสั่ง) -->
+            <!-- 4. ตำแหน่ง / ระดับ (Level) -->
             <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-                <h3 class="text-lg font-bold text-slate-800 mb-2">👔 ระดับตำแหน่ง</h3>
-                <p class="text-xs text-slate-500 mb-4">ระบุระดับตำแหน่ง เช่น พนักงาน, ผู้จัดการ</p>
+                <h3 class="text-lg font-bold text-slate-800 mb-2">👔 ระดับ (Level)</h3>
+                <p class="text-xs text-slate-500 mb-4">ระบุระดับโครงสร้างองค์กร เช่น พนักงาน, ผู้จัดการ</p>
                 <div class="flex space-x-2 mb-4">
-                    <input type="text" id="new-position-input" placeholder="พิมพ์ชื่อตำแหน่งใหม่..." class="flex-grow px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#31c1d7] outline-none text-sm">
+                    <input type="text" id="new-position-input" placeholder="พิมพ์ชื่อระดับใหม่..." class="flex-grow px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#31c1d7] outline-none text-sm">
                     <button onclick="addMasterDataItem('positions', 'new-position-input')" class="bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-900 transition-colors">เพิ่ม</button>
                 </div>
                 <div id="settings-positions-list" class="space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar pr-2"></div>
@@ -193,7 +192,7 @@
         </div>
     </div>
 
-    <!-- แท็บ 4: ตรวจสอบหลักฐาน (Approvals) -->
+    <!-- แท็บ 4: ตรวจสอบหลักฐาน -->
     <div id="approvals-content" class="hidden animate-fade-slide-up flex-grow">
         <div class="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pl-2">
             <div>
@@ -232,10 +231,9 @@
         </div>
     </div>
 
-    <!-- แท็บ 5: Dashboard (รายงานผู้เรียน) -->
+    <!-- แท็บ 5: Dashboard -->
      <div id="dashboard-content" class="hidden animate-fade-slide-up flex-grow">
-        
-        <!-- Header Dashboard -->
+        <!-- (คงเนื้อหา Dashboard เดิมทั้งหมด) -->
         <div class="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pl-2">
             <div>
                 <h2 class="text-2xl font-bold text-slate-800">ภาพรวมการพัฒนาบุคลากร</h2>
@@ -252,7 +250,6 @@
             </div>
         </div>
 
-        <!-- 1. การ์ดสรุปสถิติ (Summary Cards) -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <div class="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 flex items-center gap-4">
                 <div class="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-500">
@@ -300,7 +297,6 @@
             </div>
         </div>
 
-        <!-- 2. กระดานผู้นำ (Top 10 Leaderboard) -->
         <h3 id="dashboard-leaderboard-title" class="text-lg font-bold text-slate-800 mb-4 pl-2 flex items-center gap-2">
             <span class="text-2xl">🏆</span> Top 10 พนักงานคะแนนสะสมสูงสุด
         </h3>
@@ -313,7 +309,6 @@
             <div id="dashboard-leaderboard-others"></div>
         </div>
 
-        <!-- 3. ส่วนของตารางข้อมูลและปุ่ม Export -->
         <div class="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col mt-8">
             <div class="p-6 border-b border-slate-100 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                 <div>
@@ -406,23 +401,69 @@
                         <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#31c1d7]"></div>
                     </label>
                 </div>
+
+                <!-- สวิตช์ตั้งเป็นคอร์สแนะนำประจำหมวดหมู่ และ มีให้ระบุลำดับ -->
+                <div class="bg-amber-50 p-4 rounded-xl border border-amber-200 shadow-sm flex flex-col gap-3">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="font-bold text-amber-800 flex items-center gap-1">⭐ แนะนำประจำหมวดหมู่</p>
+                            <p class="text-[10px] text-amber-600 mt-0.5">ดันคอร์สนี้ไปหน้าสุดของหมวดหมู่ย่อยนั้นๆ</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="lesson-is-category-featured" class="sr-only peer" onchange="document.getElementById('cat-feat-order-container').classList.toggle('hidden', !this.checked)">
+                            <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                        </label>
+                    </div>
+                    <!-- JAVIS ADDED: ช่องระบุลำดับการแนะนำ ถ้าปิดซ่อนไว้ -->
+                    <div id="cat-feat-order-container" class="hidden flex items-center gap-2 border-t border-amber-200/50 pt-3">
+                        <label class="text-[11px] font-bold text-amber-800">ระบุลำดับการขึ้นแสดง :</label>
+                        <input type="number" id="lesson-category-featured-order" min="1" value="1" class="w-16 px-2 py-1 bg-white border border-amber-200 rounded text-center text-sm focus:ring-1 focus:ring-amber-500 outline-none text-amber-700 font-bold">
+                        <span class="text-[9px] text-amber-600">(1 = หน้าสุด)</span>
+                    </div>
+                </div>
+
+                <div class="bg-rose-50 p-4 rounded-xl border border-rose-200 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="font-bold text-rose-800 flex items-center gap-1">🔥 ตั้งเป็นคอร์สแนะนำ (Global)</p>
+                        <p class="text-xs text-rose-600 mt-0.5">ดันคอร์สนี้ไปแสดงแถวบนสุดของหน้าแรก</p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="lesson-is-featured" class="sr-only peer">
+                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-500"></div>
+                    </label>
+                </div>
+                
             </div>
             <div class="space-y-5">
                 <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                     <label class="block text-sm font-bold text-slate-800 mb-1">กลุ่มเป้าหมาย (แผนก)</label>
-                    <p class="text-xs text-slate-500 mb-3">เลือกแผนกที่ต้องเรียนคอร์สนี้</p>
-                    <div id="lesson-departments-container" class="checkbox-group-scroll space-y-2 custom-scrollbar pr-2 bg-slate-50 p-3 rounded-lg border border-slate-100"></div>
+                    <p class="text-[11px] text-slate-500 mb-2">พิมพ์ค้นหาหรือคลิกเลือกแผนกด้านล่าง</p>
+                    <div class="relative">
+                        <input type="text" id="search-dept-input" autocomplete="off" placeholder="ค้นหาแผนก..." class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#31c1d7] outline-none text-sm transition-all shadow-sm">
+                        <div id="dept-suggestions" class="absolute left-0 right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-slate-200 z-[50] hidden max-h-48 overflow-y-auto custom-scrollbar"></div>
+                    </div>
+                    <div id="selected-dept-tags" class="flex flex-wrap gap-2 mt-3 min-h-[30px]"></div>
                 </div>
+
                 <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                     <label class="block text-sm font-bold text-slate-800 mb-1">กลุ่มเป้าหมาย (ตำแหน่ง)</label>
-                    <div id="lesson-positions-container" class="checkbox-group-scroll space-y-2 custom-scrollbar pr-2 bg-slate-50 p-3 rounded-lg border border-slate-100"></div>
+                    <p class="text-[11px] text-slate-500 mb-2">พิมพ์ค้นหาหรือคลิกเลือกตำแหน่งด้านล่าง</p>
+                    <div class="relative">
+                        <input type="text" id="search-pos-input" autocomplete="off" placeholder="ค้นหาตำแหน่ง..." class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#31c1d7] outline-none text-sm transition-all shadow-sm">
+                        <div id="pos-suggestions" class="absolute left-0 right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-slate-200 z-[50] hidden max-h-48 overflow-y-auto custom-scrollbar"></div>
+                    </div>
+                    <div id="selected-pos-tags" class="flex flex-wrap gap-2 mt-3 min-h-[30px]"></div>
                 </div>
+                
                 <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                     <label class="block text-sm font-bold text-slate-800 mb-1">เจาะจงรายบุคคล (ระบุอีเมล)</label>
-                    <p class="text-[11px] text-slate-500 mb-2">พิมพ์อีเมลแล้วกด <kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded-md text-slate-600 font-mono">Enter</kbd> หรือ <kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded-md text-slate-600 font-mono">Spacebar</kbd></p>
-                    <div class="flex flex-wrap items-center gap-2 w-full p-2 bg-slate-50 border border-slate-200 rounded-lg min-h-[46px] focus-within:ring-2 focus-within:ring-[#31c1d7] transition-all cursor-text" onclick="document.getElementById('lesson-email-input').focus()">
-                        <div id="email-tags-wrapper" class="flex flex-wrap items-center gap-2"></div>
-                        <input type="text" id="lesson-email-input" placeholder="เพิ่มอีเมล..." class="flex-grow bg-transparent border-none outline-none text-sm min-w-[120px] p-1">
+                    <p class="text-[11px] text-slate-500 mb-2">พิมพ์ค้นหาชื่อ/อีเมล หรือพิมพ์อีเมลแล้วกด <kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded-md text-slate-600 font-mono">Enter</kbd></p>
+                    <div class="relative">
+                        <div class="flex flex-wrap items-center gap-2 w-full p-2 bg-slate-50 border border-slate-200 rounded-lg min-h-[46px] focus-within:ring-2 focus-within:ring-[#31c1d7] transition-all cursor-text" onclick="document.getElementById('lesson-email-input').focus()">
+                            <div id="email-tags-wrapper" class="flex flex-wrap items-center gap-2"></div>
+                            <input type="text" id="lesson-email-input" autocomplete="off" placeholder="พิมพ์ชื่อหรืออีเมล..." class="flex-grow bg-transparent border-none outline-none text-sm min-w-[120px] p-1">
+                        </div>
+                        <div id="email-suggestions" class="absolute left-0 right-0 top-[100%] mt-1 bg-white rounded-xl shadow-xl border border-slate-200 z-[9999] hidden max-h-48 overflow-y-auto custom-scrollbar"></div>
                     </div>
                 </div>
             </div>
@@ -457,10 +498,11 @@
               </div>
           </div>
           
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div><label class="block text-sm font-bold text-slate-700 mb-2">ลำดับการเล่น</label><input type="number" id="section-order" required class="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none shadow-sm"></div>
-              <div><label class="block text-sm font-bold text-slate-700 mb-2">คะแนนดูจบ (BN)</label><input type="number" id="section-video-points" required value="10" min="0" class="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#31c1d7] outline-none shadow-sm text-center font-bold text-[#31c1d7]"></div>
-              <div><label class="block text-sm font-bold text-slate-700 mb-2">โบนัสสอบผ่าน</label><input type="number" id="section-quiz-points" required value="50" min="0" class="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-violet-500 outline-none shadow-sm text-center font-bold text-violet-500"></div>
+          <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+              <div><label class="block text-sm font-bold text-slate-700 mb-2">ลำดับ</label><input type="number" id="section-order" required class="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none shadow-sm"></div>
+              <div><label class="block text-sm font-bold text-slate-700 mb-2">เวลา(นาที)</label><input type="number" id="section-duration" required value="15" min="1" class="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none shadow-sm text-center font-bold text-blue-500"></div>
+              <div><label class="block text-sm font-bold text-slate-700 mb-2">คะแนนดูจบ</label><input type="number" id="section-video-points" required value="10" min="0" class="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#31c1d7] outline-none shadow-sm text-center font-bold text-[#31c1d7]"></div>
+              <div><label class="block text-sm font-bold text-slate-700 mb-2">โบนัสสอบ</label><input type="number" id="section-quiz-points" required value="50" min="0" class="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-violet-500 outline-none shadow-sm text-center font-bold text-violet-500"></div>
           </div>
         </div>
       </div>
@@ -540,12 +582,18 @@
                 </div>
             </div>
             <div>
-                <label class="block text-sm font-bold text-slate-700 mb-1">แผนก</label>
-                <select id="user-department" class="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#31c1d7] outline-none"></select>
+                <label class="block text-sm font-bold text-slate-700 mb-1">ตำแหน่งงาน (Job Title)</label>
+                <input type="text" id="user-jobtitle" placeholder="เช่น เจ้าหน้าที่พัฒนาระบบภายใน" class="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#31c1d7] outline-none">
             </div>
-            <div>
-                <label class="block text-sm font-bold text-slate-700 mb-1">ตำแหน่ง</label>
-                <select id="user-position" class="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#31c1d7] outline-none"></select>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-1">แผนก</label>
+                    <select id="user-department" class="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#31c1d7] outline-none"></select>
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-1">ระดับ (Level)</label>
+                    <select id="user-position" class="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#31c1d7] outline-none"></select>
+                </div>
             </div>
         </div>
         <div class="px-6 py-4 bg-white border-t border-slate-100 flex justify-end space-x-3">
@@ -579,37 +627,47 @@
     </div>
   </div>
 
-<!-- JAVIS ADDED: Modal ประวัติการให้คะแนนพิเศษ -->
-  <div id="user-score-log-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden z-[200] flex justify-center items-center p-4 transition-opacity">
-      <div class="bg-white rounded-3xl w-full max-w-3xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col">
-          <div class="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-white">
-              <div>
-                  <h3 class="text-xl sm:text-2xl font-extrabold text-slate-800">ประวัติคะแนนพิเศษ (Log)</h3>
-                  <p id="score-log-user-email" class="text-sm text-[#31c1d7] font-medium mt-1"></p>
-              </div>
-              <button type="button" onclick="closeModals()" class="text-slate-400 hover:text-red-500 bg-slate-50 hover:bg-red-50 rounded-full w-8 h-8 flex items-center justify-center font-bold transition-colors">&times;</button>
-          </div>
-          <div class="p-6 overflow-y-auto custom-scrollbar flex-grow bg-slate-50/50">
-              <div class="w-full overflow-x-auto">
-                  <table class="w-full text-left text-sm whitespace-nowrap border-collapse">
-                      <thead>
-                          <tr class="text-slate-500 border-b border-slate-200 bg-slate-50">
-                              <th class="py-3 px-4 font-bold rounded-tl-xl">วันที่ / เวลา</th>
-                              <th class="py-3 px-4 font-bold text-center">คะแนน</th>
-                              <th class="py-3 px-4 font-bold">เหตุผล / รายละเอียด</th>
-                              <th class="py-3 px-4 font-bold rounded-tr-xl">ผู้ทำรายการ</th>
-                          </tr>
-                      </thead>
-                      <tbody id="user-score-log-content" class="divide-y divide-slate-100 text-slate-700 bg-white">
-                          <!-- Data injected via JS -->
-                      </tbody>
-                  </table>
-              </div>
-          </div>
-      </div>
+  <!-- JAVIS ADDED: Modal สำหรับแก้ไขหมวดหมู่และแผนก (รวมถึงตั้งค่าดันขึ้นหน้าแรก) -->
+  <div id="edit-category-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden z-[200] flex justify-center items-center p-4 transition-opacity">
+    <form id="edit-category-form" onsubmit="saveEditedCategory(event)" class="bg-white rounded-3xl w-full max-w-md shadow-xl overflow-hidden transform transition-all scale-95 opacity-0">
+        <div class="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-white">
+            <h3 class="text-xl font-extrabold text-slate-800" id="edit-category-title">แก้ไขข้อมูล</h3>
+            <button type="button" onclick="closeEditCategoryModal()" class="text-slate-400 hover:text-red-500 bg-slate-50 hover:bg-red-50 rounded-full w-8 h-8 flex items-center justify-center font-bold transition-colors">&times;</button>
+        </div>
+        <div class="p-6 bg-slate-50/50 space-y-4">
+            <input type="hidden" id="edit-category-type">
+            <input type="hidden" id="edit-category-old-val">
+            <input type="hidden" id="edit-category-parent">
+            <div>
+                <label class="block text-sm font-bold text-slate-700 mb-1">ชื่อ</label>
+                <input type="text" id="edit-category-name" required class="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#31c1d7] outline-none font-bold shadow-sm">
+            </div>
+            <div id="edit-category-desc-container">
+                <label class="block text-sm font-bold text-slate-700 mb-1">คำอธิบาย</label>
+                <input type="text" id="edit-category-desc" class="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#31c1d7] outline-none shadow-sm">
+            </div>
+            
+            <!-- JAVIS ADDED: สวิตช์ตั้งเป็นหมวดแนะนำสำหรับการ Edit -->
+            <div id="edit-category-featured-container" class="hidden items-center justify-between mt-4 bg-rose-50 border border-rose-100 p-3 rounded-xl">
+                <div>
+                    <p class="text-sm font-bold text-rose-700">⭐ ตั้งเป็นหมวดแนะนำ</p>
+                    <p class="text-[10px] text-rose-500 mt-0.5">ดันหมวดหมู่นี้ให้แสดงบนสุดของหน้าแรก</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="edit-category-featured" class="sr-only peer">
+                    <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-500"></div>
+                </label>
+            </div>
+            
+        </div>
+        <div class="px-6 py-4 bg-white border-t border-slate-100 flex justify-end space-x-3">
+            <button type="button" onclick="closeEditCategoryModal()" class="px-5 py-2.5 bg-slate-50 text-slate-700 font-bold rounded-xl hover:bg-slate-100 transition-colors">ยกเลิก</button>
+            <button type="submit" id="save-edit-category-btn" class="px-6 py-2.5 bg-[#31c1d7] text-white font-bold rounded-xl shadow-sm hover:bg-[#1eb0c6] transition-all">บันทึกการแก้ไข</button>
+        </div>
+    </form>
   </div>
 
-  <!-- JAVIS ADDED: Custom Confirm Modal -->
+  <!-- Custom Confirm Modal -->
   <div id="custom-confirm-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden z-[9999] flex justify-center items-center p-4 transition-opacity duration-300 opacity-0">
       <div id="custom-confirm-box" class="bg-white rounded-[2rem] w-full max-w-sm shadow-2xl p-8 text-center transform scale-95 transition-transform duration-300">
           <div id="custom-confirm-icon-wrapper" class="w-20 h-20 rounded-full mx-auto flex items-center justify-center mb-5 shadow-inner bg-rose-50 text-rose-500">
