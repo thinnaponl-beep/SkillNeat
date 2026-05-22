@@ -1,0 +1,460 @@
+<script>
+/* ==========================================
+   7. ระบบเล่นวิดีโอ (YouTube Player) & คอร์สภายนอก
+========================================== */
+
+function minimizeVideo(backViewStr) {
+    const section = currentLesson.sections[currentSectionIndex];
+    if(getActualContentType(section) !== 'youtube') {
+        closeVideo();
+        showView(backViewStr);
+        return;
+    }
+    
+    isMiniPlayer = true;
+    
+    // JAVIS FIX: เลิกใช้วิธีย้าย DOM Element เพื่อป้องกันวิดีโอโหลดใหม่ 
+    // เปลี่ยนมาใช้ CSS Fixed วางทับหน้าจอไปเลย
+    views.videoPlayer.classList.add('fixed', 'bottom-6', 'right-6', 'w-80', 'sm:w-96', 'z-[9999]', 'transition-all', 'duration-500');
+    document.getElementById('video-back-btn').classList.add('hidden');
+    document.getElementById('video-header').classList.add('hidden');
+    const wrapper = document.getElementById('video-wrapper');
+    wrapper.classList.remove('p-6', 'sm:p-8', 'shadow-xl', 'border', 'border-slate-100', 'bg-white');
+    wrapper.classList.add('shadow-2xl', 'rounded-2xl', 'overflow-hidden');
+    document.getElementById('mini-player-controls').classList.remove('hidden');
+    
+    // JAVIS FIX: ล้างค่า transform ของกล่องแม่ เพื่อป้องกัน CSS Fixed ทำงานเพี้ยน
+    const appContainer = document.getElementById('admin-app') || document.querySelector('.animate-fade-slide-up');
+    if (appContainer) {
+        appContainer.style.transform = 'none';
+        appContainer.style.animation = 'none';
+    }
+    
+    showView(backViewStr);
+}
+
+function expandVideo() {
+    isMiniPlayer = false;
+
+    views.videoPlayer.classList.remove('fixed', 'bottom-6', 'right-6', 'w-80', 'sm:w-96', 'z-[9999]', 'transition-all', 'duration-500');
+    document.getElementById('video-back-btn').classList.remove('hidden');
+    document.getElementById('video-header').classList.remove('hidden');
+    const wrapper = document.getElementById('video-wrapper');
+    wrapper.classList.add('p-6', 'sm:p-8', 'shadow-xl', 'border', 'border-slate-100', 'bg-white');
+    wrapper.classList.remove('shadow-2xl', 'rounded-2xl', 'overflow-hidden');
+    const miniCtrls = document.getElementById('mini-player-controls');
+    if (miniCtrls) miniCtrls.classList.add('hidden');
+    showView('videoPlayer');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function closeVideo() {
+    isMiniPlayer = false;
+
+    if (player && typeof player.destroy === 'function') {
+        player.destroy();
+        player = null;
+    }
+    if (progressSaveTimeout) { clearInterval(progressSaveTimeout); progressSaveTimeout = null; }
+    if (videoTrackerInterval) { clearInterval(videoTrackerInterval); videoTrackerInterval = null; }
+    
+    currentExternalProofBase64 = null;
+    currentExternalProofMimeType = null;
+    
+    views.videoPlayer.classList.remove('fixed', 'bottom-6', 'right-6', 'w-80', 'sm:w-96', 'z-[9999]', 'transition-all', 'duration-500');
+    views.videoPlayer.classList.add('hidden');
+    views.videoPlayer.innerHTML = '';
+}
+
+function togglePlayPause() {
+    if (player && typeof player.getPlayerState === 'function') {
+        const state = player.getPlayerState();
+        const ppIcon = document.getElementById('play-pause-icon');
+        if (state === YT.PlayerState.PLAYING) {
+            player.pauseVideo();
+            if (ppIcon) ppIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>'; 
+        } else {
+            player.playVideo();
+            if (ppIcon) ppIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>'; 
+        }
+    }
+}
+
+function playSection(lessonId, sectionIndex) {
+    if(typeof closeLessonDetailsModal === 'function') closeLessonDetailsModal();
+    if (isMiniPlayer) closeVideo();
+    
+    currentLesson = lessons.find(function(l) { return l.LessonID === lessonId; });
+    currentSectionIndex = sectionIndex;
+    const section = currentLesson.sections[currentSectionIndex];
+    
+    // JAVIS FIX: บันทึกสถานะ "เริ่มเรียน" ลง Server ทันที ป้องกันรีเฟรชแล้วหาย
+    if (!currentLesson.isStarted) {
+        currentLesson.isStarted = true;
+        google.script.run.updateLatestTimestamp({ 
+            sectionId: String(section.SectionID).trim(), 
+            timestamp: 1 
+        });
+    }
+    
+    const contentType = getActualContentType(section);
+    latestTimestampWatched = section.latestTimestamp || 0;
+    maxTimeWatched = latestTimestampWatched; 
+    
+    const backViewStr = (new URLSearchParams(window.location.search).get('tab') === 'mycourses') ? 'myCoursesView' : 'lessonList';
+    const safeBackViewStr = escapeJsString(backViewStr);
+    
+    let contentHtml = '';
+    const sectionIdSafe = String(section.SectionID).trim();
+    const isAlreadyCompleted = userInfo.progress.some(function(id) { return String(id).trim() === sectionIdSafe; });
+    const isPending = section.externalProof && section.externalProof.Status === 'Pending';
+    const isRejected = section.externalProof && section.externalProof.Status === 'Rejected';
+    
+    if (contentType === 'youtube') {
+        contentHtml = '<div class="relative w-full aspect-video rounded-2xl overflow-hidden bg-slate-900 shadow-inner group">' +
+            '<div id="player" class="absolute top-0 left-0 w-full h-full"></div>' +
+            '<div id="video-ended-message" class="absolute inset-0 bg-slate-900/95 backdrop-blur-md hidden flex-col justify-center items-center z-30 animate-fade-slide-up p-4"></div>' +
+            '<div id="mini-player-controls" class="hidden absolute inset-0 bg-slate-900/50 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-20 backdrop-blur-[2px]">' +
+                '<button onclick="togglePlayPause()" class="w-12 h-12 bg-white/20 hover:bg-[#31c1d7] text-white rounded-full flex items-center justify-center backdrop-blur-md transition-all"><svg id="play-pause-icon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></button>' +
+                '<button onclick="expandVideo()" class="w-10 h-10 bg-white/20 hover:bg-emerald-500 text-white rounded-full flex items-center justify-center backdrop-blur-md transition-all" title="ขยายเต็มจอ"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg></button>' +
+                '<button onclick="closeVideo()" class="w-10 h-10 bg-white/20 hover:bg-rose-500 text-white rounded-full flex items-center justify-center backdrop-blur-md transition-all" title="ปิดวิดีโอ"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>' +
+            '</div></div>';
+    } else if (contentType === 'external') {
+        let uploadAreaHtml = '';
+        if (isAlreadyCompleted) {
+             uploadAreaHtml = '<div class="mt-8 p-4 bg-emerald-50 text-emerald-600 rounded-xl font-bold text-center border border-emerald-100"><span class="mr-2">✅</span> หลักฐานผ่านการตรวจสอบเรียบร้อยแล้ว</div>';
+        } else if (isPending) {
+             uploadAreaHtml = '<div class="mt-8 p-6 bg-amber-50 rounded-2xl border border-amber-200 text-center"><div class="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-3"><svg class="animate-spin w-8 h-8 text-amber-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div><h4 class="text-lg font-bold text-amber-700 mb-2">ส่งหลักฐานแล้ว รอการตรวจสอบ</h4><p class="text-sm text-amber-600 mb-4">แอดมินกำลังตรวจสอบความถูกต้องของหลักฐานคุณ ระหว่างนี้สามารถทำข้อสอบ (ถ้ามี) หรือเรียนบทต่อไปได้เลย</p>';
+             if (section.hasQuiz) uploadAreaHtml += '<button onclick="startQuiz()" class="px-6 py-3 bg-violet-500 hover:bg-violet-600 text-white font-bold rounded-xl transition-all shadow-sm">เริ่มทำแบบทดสอบ</button>';
+             uploadAreaHtml += '</div>';
+        } else {
+            uploadAreaHtml = '<div class="border-t border-blue-200 pt-8" id="external-upload-container">' +
+                '<h4 class="text-lg font-bold text-slate-800 mb-4">📤 อัปโหลดหลักฐาน / ใบประกาศ</h4>' +
+                (isRejected ? '<div class="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-600 text-sm font-bold rounded-xl text-center">❌ หลักฐานเดิมไม่ผ่านการตรวจสอบ กรุณาอัปโหลดรูปภาพใหม่ครับ</div>' : '') +
+                '<div class="relative border-2 border-dashed border-blue-300 rounded-xl p-6 bg-white hover:bg-blue-50 transition-colors cursor-pointer" onclick="document.getElementById(\'external-proof-file\').click()">' +
+                    '<input type="file" id="external-proof-file" class="hidden" accept="image/*" onchange="handleExternalProofUpload(event)">' +
+                    '<div id="external-proof-preview" class="hidden flex-col items-center"><img id="external-proof-img" src="" class="max-h-48 rounded-lg mb-3 shadow-sm"><p class="text-sm font-bold text-emerald-600">แนบไฟล์เรียบร้อยแล้ว คลิกเพื่อเปลี่ยนรูป</p></div>' +
+                    '<div id="external-proof-placeholder" class="flex flex-col items-center"><svg class="w-10 h-10 text-blue-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg><p class="text-sm font-bold text-slate-600">คลิกเพื่อเลือกไฟล์รูปภาพ</p></div>' +
+                '</div><button id="btn-submit-proof" onclick="submitExternalProof()" class="mt-4 w-full px-6 py-3 bg-slate-800 text-white font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hidden transition-all">ส่งหลักฐานให้แอดมินตรวจสอบ</button></div>';
+        }
+
+        contentHtml = '<div class="bg-blue-50 border border-blue-100 rounded-2xl p-8 text-center max-w-2xl mx-auto"><div class="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm"><span class="text-4xl">🌐</span></div>' +
+            '<h3 class="text-2xl font-black text-slate-800 mb-2">เนื้อหานี้อยู่บนระบบ External</h3>' +
+            '<p class="text-slate-600 mb-6 font-medium">กรุณากดปุ่มด้านล่างเพื่อไปเรียนที่แพลตฟอร์มเป้าหมาย เมื่อเรียนจบแล้วให้เซฟภาพหน้าจอผลการเรียนมาอัปโหลดที่นี่ครับ</p>' +
+            '<a href="' + escapeHtml(section.YouTubeVideoID) + '" target="_blank" class="inline-block px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl shadow-lg shadow-blue-600/30 transition-all text-lg">🚀 ไปเรียนที่ลิงก์ External</a>' +
+            uploadAreaHtml + '<div id="video-ended-message" class="absolute inset-0 bg-slate-900/95 backdrop-blur-md hidden flex-col justify-center items-center z-30 animate-fade-slide-up p-4"></div></div>';
+    }
+    
+    views.videoPlayer.innerHTML = '<div id="video-main-container" class="max-w-4xl mx-auto w-full transition-all duration-300">' +
+        '<button id="video-back-btn" onclick="minimizeVideo(\'' + safeBackViewStr + '\')" class="mb-6 text-slate-500 font-bold py-2 px-4 rounded-xl hover:bg-slate-100 inline-flex items-center transition-all" title="ย่อวิดีโอเป็นจอเล็ก">&larr; ย่อวิดีโอกลับหน้าหลัก</button>' +
+        '<div id="video-wrapper" class="bg-white p-6 sm:p-8 rounded-[2rem] shadow-xl border border-slate-100 relative transition-all duration-300">' +
+        '<div id="video-header" class="mb-6 flex flex-col sm:flex-row sm:items-end justify-between gap-4"><div><span class="text-[11px] font-black text-[#31c1d7] tracking-[0.2em] uppercase mb-2 block">Now Learning</span>' +
+        '<h2 class="text-2xl sm:text-3xl font-extrabold text-slate-800 leading-tight">' + escapeHtml(section.Title) + '</h2>' +
+        '<p class="text-slate-500 mt-2 font-medium text-base">' + escapeHtml(currentLesson.Title) + '</p></div></div>' + contentHtml + '</div></div>';
+    
+    showView('videoPlayer');
+    if (contentType === 'youtube') {
+        if (player) player.destroy();
+        loadYouTubePlayer(section.YouTubeVideoID, latestTimestampWatched);
+    }
+}
+
+function loadYouTubePlayer(videoId, startSeconds) {
+    if (typeof YT === 'undefined' || typeof YT.Player === 'undefined') {
+        setTimeout(function() { loadYouTubePlayer(videoId, startSeconds); }, 500); return;
+    }
+    player = new YT.Player('player', {
+        height: '100%', width: '100%', videoId: videoId,
+        playerVars: { 'autoplay': 1, 'start': startSeconds, 'rel': 0, 'modestbranding': 1, 'playsinline': 1 },
+        events: { 'onReady': onPlayerReady, 'onStateChange': onPlayerStateChange }
+    });
+}
+
+function onPlayerReady(event) { }
+
+function onPlayerStateChange(event) {
+    const ppIcon = document.getElementById('play-pause-icon');
+    if (event.data == YT.PlayerState.PLAYING || event.data == YT.PlayerState.BUFFERING) checkVideoSkip();
+    if (event.data == YT.PlayerState.PLAYING) {
+        if (progressSaveTimeout) clearInterval(progressSaveTimeout);
+        progressSaveTimeout = setInterval(saveVideoProgress, 10000); 
+        if (!videoTrackerInterval) videoTrackerInterval = setInterval(checkVideoSkip, 500);
+        if (ppIcon) ppIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
+    } else {
+        if (progressSaveTimeout) clearInterval(progressSaveTimeout);
+        if (event.data == YT.PlayerState.PAUSED && ppIcon) ppIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
+    }
+    if (event.data == YT.PlayerState.ENDED) {
+        if (videoTrackerInterval) { clearInterval(videoTrackerInterval); videoTrackerInterval = null; }
+        if (isMiniPlayer) expandVideo();
+        showVideoEndedMessage();
+    }
+}
+
+function checkVideoSkip() {
+    if (player && typeof player.getCurrentTime === 'function') {
+        const currentTime = player.getCurrentTime();
+        const section = currentLesson.sections[currentSectionIndex];
+        const sectionIdSafe = String(section.SectionID).trim();
+        const isAlreadyCompleted = userInfo.progress.some(function(id) { return String(id).trim() === sectionIdSafe; });
+        const isSuperAdminUser = document.querySelector('a[data-page="superadmin"]') !== null;
+        
+        if (isSuperAdminUser || isAlreadyCompleted) {
+            if (currentTime > maxTimeWatched) maxTimeWatched = currentTime;
+            return;
+        }
+
+        if (currentTime > maxTimeWatched + 2) {
+            player.seekTo(maxTimeWatched); 
+            showToast('ไม่อนุญาตให้กรอวิดีโอข้ามเนื้อหาครับ 🚫', 'error');
+        } else {
+            if (currentTime > maxTimeWatched) maxTimeWatched = currentTime;
+        }
+    }
+}
+
+function saveVideoProgress() {
+    if (player && typeof player.getCurrentTime === 'function') {
+        const sectionId = currentLesson.sections[currentSectionIndex].SectionID;
+        google.script.run.updateLatestTimestamp({ sectionId: sectionId, timestamp: Math.floor(maxTimeWatched) });
+    }
+}
+
+function showVideoEndedMessage() {
+    const msgBox = document.getElementById('video-ended-message');
+    const section = currentLesson.sections[currentSectionIndex];
+    let vp = parseInt(section.VideoPoints, 10); if (isNaN(vp)) vp = 10;
+    
+    let newlyCompleted = false;
+    const sectionIdSafe = String(section.SectionID).trim();
+    const isAlreadyCompleted = userInfo.progress.some(function(id) { return String(id).trim() === sectionIdSafe; });
+
+    if (!isAlreadyCompleted) {
+        userInfo.progress.push(sectionIdSafe);
+        newlyCompleted = true;
+        userInfo.totalBN = (parseInt(userInfo.totalBN, 10) || 0) + vp;
+        if (getActualContentType(section) !== 'external') {
+            google.script.run.withSuccessHandler(function() {
+                showToast('บันทึกความคืบหน้าเรียบร้อยแล้ว');
+                cachedLeaderboardData = { 'current_month': null, 'all': null };
+                if(typeof fetchHomeLeaderboard === 'function') fetchHomeLeaderboard(true);
+            }).recordProgress(sectionIdSafe);
+        }
+        if (typeof window.updateNavbarRank === 'function') window.updateNavbarRank(null, vp);
+    }
+
+    let html = '<div class="w-16 h-16 sm:w-20 sm:h-20 bg-emerald-500 rounded-full flex items-center justify-center mb-4 sm:mb-6 shadow-lg shadow-emerald-500/30"><svg class="w-8 h-8 sm:w-10 sm:h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg></div>' +
+        '<h3 class="text-2xl sm:text-3xl font-black text-white mb-2">เรียนจบเนื้อหานี้แล้ว!</h3>';
+        
+    if (newlyCompleted) html += '<div class="inline-flex items-center px-4 py-2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl mb-6 shadow-sm"><span class="text-xl mr-2">⭐</span><span class="font-bold">ได้รับคะแนนเรียนจบ +' + vp + ' BN</span></div>';
+    else html += '<div class="inline-flex items-center px-4 py-2 bg-slate-800 text-slate-300 rounded-xl mb-6 shadow-sm"><span class="font-bold text-sm">คุณเคยได้รับคะแนนจากเนื้อหานี้แล้ว</span></div>';
+        
+    html += '<p class="text-slate-300 mb-8 text-sm sm:text-lg">คุณทำได้ยอดเยี่ยมมาก</p>' +
+        '<div class="flex flex-col sm:flex-row gap-3 sm:gap-4 w-full max-w-sm mx-auto justify-center flex-wrap">';
+        
+    const safeLessonIdStr = escapeJsString(currentLesson.LessonID);
+
+    if (section.hasQuiz) {
+        html += '<button onclick="startQuiz()" class="w-full px-6 py-3 sm:py-4 bg-[#31c1d7] text-white font-bold rounded-xl sm:rounded-2xl hover:bg-[#1eb0c6] transition-all shadow-lg shadow-[#31c1d7]/30 text-base sm:text-lg">เริ่มทำแบบทดสอบ</button>';
+    } else {
+        if (currentSectionIndex < currentLesson.sections.length - 1) {
+            html += '<button onclick="playSection(\'' + safeLessonIdStr + '\', ' + (currentSectionIndex + 1) + ')" class="w-full px-6 py-3 sm:py-4 bg-[#31c1d7] text-white font-bold rounded-xl sm:rounded-2xl hover:bg-[#1eb0c6] transition-all shadow-lg text-base sm:text-lg">เรียนบทถัดไป</button>';
+        } else {
+            const lessonStats = getLessonProgressStats(currentLesson);
+            if (lessonStats.isCompleted) html += '<button onclick="downloadCertificate(\'' + safeLessonIdStr + '\')" class="w-full px-6 py-3 sm:py-4 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl sm:rounded-2xl transition-all text-lg shadow-lg mb-2">🎓 ดูตัวอย่างใบประกาศ</button>';
+            html += '<button onclick="showView(\'lessonList\'); if(typeof renderLessonList === \'function\') renderLessonList(); if(typeof renderMyCourses === \'function\') renderMyCourses();" class="w-full px-6 py-3 sm:py-4 bg-[#31c1d7] text-white font-bold rounded-xl sm:rounded-2xl hover:bg-[#1eb0c6] transition-all shadow-lg text-base sm:text-lg">กลับหน้าหลัก</button>';
+        }
+    }
+    
+    let seekCode = '';
+    if (player && typeof player.seekTo === 'function') seekCode = 'player.seekTo(0); player.playVideo();';
+
+    if (getActualContentType(section) === 'youtube') html += '<button onclick="document.getElementById(\'video-ended-message\').classList.add(\'hidden\'); document.getElementById(\'video-ended-message\').classList.remove(\'flex\'); ' + seekCode + '" class="w-full px-6 py-3 sm:py-4 bg-white/10 text-white font-bold rounded-xl sm:rounded-2xl hover:bg-white/20 transition-all text-base sm:text-lg border border-white/10 mt-1">ดูซ้ำอีกครั้ง</button></div>';
+    else html += '<button onclick="showView(\'lessonList\'); if(typeof renderLessonList === \'function\') renderLessonList(); if(typeof renderMyCourses === \'function\') renderMyCourses();" class="w-full px-6 py-3 sm:py-4 bg-white/10 text-white font-bold rounded-xl sm:rounded-2xl hover:bg-white/20 transition-all text-base sm:text-lg border border-white/10 mt-1">ปิดหน้าต่าง</button></div>';
+    
+    msgBox.innerHTML = html;
+    msgBox.classList.remove('hidden');
+    msgBox.classList.add('flex');
+}
+
+function handleExternalProofUpload(event) {
+    const file = event.target.files[0];
+    if (file) {
+        if (file.size > 5 * 1024 * 1024) { showToast('ขนาดไฟล์รูปภาพใหญ่เกินไป (ไม่เกิน 5MB)', 'error'); return; }
+        currentExternalProofMimeType = file.type;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById('external-proof-img').src = e.target.result;
+            currentExternalProofBase64 = e.target.result.split(',')[1];
+            document.getElementById('external-proof-placeholder').classList.add('hidden');
+            document.getElementById('external-proof-preview').classList.remove('hidden');
+            document.getElementById('external-proof-preview').classList.add('flex');
+            document.getElementById('btn-submit-proof').classList.remove('hidden');
+            document.getElementById('btn-submit-proof').disabled = false;
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
+function submitExternalProof() {
+    if (!currentExternalProofBase64) return;
+    const btn = document.getElementById('btn-submit-proof');
+    btn.disabled = true;
+    btn.innerHTML = '<svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> กำลังส่งหลักฐาน...';
+    
+    const payload = {
+        sectionId: String(currentLesson.sections[currentSectionIndex].SectionID).trim(),
+        imageData: currentExternalProofBase64,
+        imageMimeType: currentExternalProofMimeType
+    };
+    
+    google.script.run.withSuccessHandler(function(res) {
+        if (res.status === 'success') {
+            showToast('ส่งหลักฐานเรียบร้อย รอแอดมินตรวจ!', 'success');
+            google.script.run.withSuccessHandler(function(newData) {
+                if(newData) {
+                   studentData.userInfo = newData.userInfo;
+                   lessons.length = 0;
+                   newData.lessons.forEach(function(l){ lessons.push(l); });
+                   currentLesson = lessons.find(function(l){ return l.LessonID === currentLesson.LessonID; });
+                   playSection(currentLesson.LessonID, currentSectionIndex); 
+                }
+            }).getStudentData();
+        } else {
+            showToast('เกิดข้อผิดพลาด: ' + res.message, 'error');
+            btn.disabled = false;
+            btn.innerHTML = 'ส่งหลักฐานให้แอดมินตรวจสอบ';
+        }
+    }).withFailureHandler(function(err) {
+        showToast('การเชื่อมต่อล้มเหลว', 'error');
+        btn.disabled = false;
+        btn.innerHTML = 'ส่งหลักฐานให้แอดมินตรวจสอบ';
+    }).submitExternalProof(payload);
+}
+
+/* ==========================================
+   8. ระบบแบบทดสอบ (Quiz)
+========================================== */
+function startQuizDirectly(lessonId, sectionIndex) {
+    if(typeof closeLessonDetailsModal === 'function') closeLessonDetailsModal();
+    if (isMiniPlayer) closeVideo();
+    currentLesson = lessons.find(function(l) { return l.LessonID === lessonId; });
+    currentSectionIndex = sectionIndex;
+    startQuiz();
+}
+
+function startQuiz() {
+    const section = currentLesson.sections[currentSectionIndex];
+    views.quiz.innerHTML = '<div class="text-center py-20"><svg class="animate-spin h-10 w-10 text-[#31c1d7] mx-auto mb-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><p class="text-slate-500 font-bold">กำลังโหลดข้อสอบ...</p></div>';
+    showView('quiz');
+    
+    google.script.run.withSuccessHandler(function(questions) {
+        quizQuestions = questions;
+        quizAnswers = new Array(questions.length).fill(null);
+        renderQuiz();
+    }).getQuiz(section.SectionID);
+}
+
+function renderQuiz() {
+    if (!quizQuestions || quizQuestions.length === 0) {
+        views.quiz.innerHTML = '<div class="bg-white p-12 rounded-[2rem] shadow-xl text-center max-w-2xl mx-auto"><p class="text-slate-500 mb-6 font-medium text-lg">ไม่พบข้อสอบสำหรับบทเรียนนี้</p><button onclick="showView(\'lessonList\')" class="px-6 py-3 bg-[#31c1d7] text-white font-bold rounded-xl hover:bg-[#1eb0c6]">กลับหน้าหลัก</button></div>';
+        return;
+    }
+
+    const safeLessonId = escapeJsString(currentLesson.LessonID);
+    let html = '<div class="max-w-3xl mx-auto bg-white rounded-[2rem] shadow-xl overflow-hidden border border-slate-100"><div class="bg-[#31c1d7] px-8 py-6 text-white"><h2 class="text-2xl font-black mb-1">แบบทดสอบ</h2><p class="opacity-90 font-medium">ทดสอบความเข้าใจจากเนื้อหา</p></div><div class="p-8 sm:p-10 space-y-10">';
+
+    quizQuestions.forEach(function(q, idx) {
+        html += '<div class="quiz-item"><h3 class="text-[17px] font-bold text-slate-800 mb-5 leading-relaxed"><span class="text-[#31c1d7] mr-2">' + (idx + 1) + '.</span>' + escapeHtml(q.question) + '</h3>';
+        if (q.options && q.options.length > 0) {
+            html += '<div class="space-y-3">';
+            q.options.forEach(function(opt) {
+                const btnClass = quizAnswers[idx] === opt ? 'border-[#31c1d7] bg-[#31c1d7]/5 text-[#31c1d7] shadow-sm' : 'text-slate-600 hover:border-slate-300';
+                html += '<button onclick="selectOption(' + idx + ', \'' + escapeJsString(opt) + '\')" class="w-full text-left px-6 py-4 rounded-xl border-2 ' + btnClass + ' font-medium transition-all text-[15px]">' + escapeHtml(opt) + '</button>';
+            });
+            html += '</div>';
+        } else {
+            html += '<input type="text" id="subjective-ans-' + idx + '" onchange="selectOption(' + idx + ', this.value)" value="' + escapeHtml(quizAnswers[idx] || '') + '" placeholder="พิมพ์คำตอบของคุณที่นี่..." class="w-full px-6 py-4 rounded-xl border-2 border-slate-200 focus:border-[#31c1d7] outline-none transition-colors font-medium text-[15px] text-slate-700">';
+        }
+        html += '</div>';
+    });
+
+    html += '</div><div class="px-8 py-6 bg-slate-50 border-t border-slate-100 flex justify-between items-center"><button onclick="playSection(\'' + safeLessonId + '\', ' + currentSectionIndex + ')" class="text-slate-500 font-bold hover:text-slate-800 transition-colors">กลับไปดูเนื้อหา</button><button onclick="submitQuiz()" class="px-8 py-3.5 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-900 transition-all shadow-md">ส่งคำตอบ</button></div></div>';
+    views.quiz.innerHTML = html;
+}
+
+function selectOption(qIndex, answerValue) {
+    quizAnswers[qIndex] = answerValue.trim();
+    if (quizQuestions[qIndex].options && quizQuestions[qIndex].options.length > 0) renderQuiz(); 
+}
+
+function submitQuiz() {
+    if (quizAnswers.some(function(a) { return a === null || a === ''; })) { showToast('กรุณาตอบคำถามให้ครบทุกข้อ', 'error'); return; }
+
+    let score = 0;
+    const total = quizQuestions.length;
+    quizQuestions.forEach(function(q, idx) {
+        const userAns = quizAnswers[idx].toLowerCase();
+        if (q.answer.toLowerCase().split(',').map(s => s.trim()).filter(Boolean).some(ans => userAns === ans || userAns.includes(ans))) score++;
+    });
+
+    const section = currentLesson.sections[currentSectionIndex];
+    const scoreData = { sectionId: String(section.SectionID).trim(), score: score, totalQuestions: total };
+    const alreadyPassed = section.quizScore && (section.quizScore.Score / section.quizScore.TotalQuestions) >= 0.5;
+
+    views.quiz.innerHTML = '<div class="text-center py-20"><svg class="animate-spin h-10 w-10 text-[#31c1d7] mx-auto mb-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><p class="text-slate-500 font-bold">กำลังประมวลผล...</p></div>';
+
+    google.script.run.withSuccessHandler(function(response) {
+        if (response.status === 'success') {
+            if (response.passed) {
+                section.quizScore = { Score: score, TotalQuestions: total };
+                if (!alreadyPassed) {
+                    let qp = parseInt(section.QuizPoints, 10); if (isNaN(qp)) qp = 50;
+                    userInfo.totalBN = (parseInt(userInfo.totalBN, 10) || 0) + qp;
+                    cachedLeaderboardData = { 'current_month': null, 'all': null };
+                    if(typeof fetchHomeLeaderboard === 'function') fetchHomeLeaderboard(true);
+                    if (typeof window.updateNavbarRank === 'function') window.updateNavbarRank(null, qp);
+                }
+            }
+            showQuizResult(score, total, response.passed, !alreadyPassed);
+        }
+    }).saveQuizScore(scoreData);
+}
+
+function showQuizResult(score, total, passed, isNewPass) {
+    const percent = Math.round((score / total) * 100);
+    const section = currentLesson.sections[currentSectionIndex];
+    let qp = parseInt(section.QuizPoints, 10); if (isNaN(qp)) qp = 50;
+    
+    let icon, title, desc, btnClass, btnText;
+
+    if (passed) {
+        icon = '<div class="w-24 h-24 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner"><svg class="w-12 h-12 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg></div>';
+        title = '<h2 class="text-3xl font-black text-slate-800 mb-2">สอบผ่าน! เยี่ยมมาก</h2>';
+        if (isNewPass) desc = '<div class="inline-flex items-center px-4 py-2 bg-violet-50 text-violet-600 border border-violet-200 rounded-xl mb-4 shadow-sm"><span class="text-xl mr-2">🎁</span><span class="font-bold">ได้รับโบนัสข้อสอบ +' + qp + ' BN</span></div><p class="text-slate-500 text-lg">คุณทำคะแนนได้ดีมาก ความรู้แน่นเปรี๊ยะ</p>';
+        else desc = '<div class="inline-flex items-center px-4 py-2 bg-slate-800 text-slate-300 rounded-xl mb-4 shadow-sm"><span class="font-bold text-sm">คุณเคยรับโบนัสจากแบบทดสอบนี้ไปแล้ว</span></div><p class="text-slate-500 text-lg">เก่งมากที่กลับมาทบทวนความรู้</p>';
+        btnClass = 'bg-[#31c1d7] hover:bg-[#1eb0c6] shadow-lg shadow-[#31c1d7]/30';
+        btnText = 'กลับหน้าหลัก';
+    } else {
+        icon = '<div class="w-24 h-24 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner"><svg class="w-12 h-12 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"></path></svg></div>';
+        title = '<h2 class="text-3xl font-black text-slate-800 mb-2">เกือบผ่านแล้ว!</h2>';
+        desc = '<p class="text-slate-500 text-lg">ทบทวนเนื้อหาอีกนิด แล้วลองใหม่นะ</p>';
+        btnClass = 'bg-slate-800 hover:bg-slate-900 shadow-lg';
+        btnText = 'ทบทวนเนื้อหา & สอบใหม่';
+    }
+
+    let html = '<div class="max-w-lg mx-auto bg-white rounded-[2rem] shadow-xl p-10 text-center border border-slate-100 animate-fade-slide-up">' +
+        icon + title + desc + '<div class="my-8 p-6 bg-slate-50 rounded-2xl border border-slate-100"><div class="text-5xl font-black ' + (passed ? 'text-emerald-500' : 'text-rose-500') + ' mb-2">' + percent + '%</div><div class="text-sm font-bold text-slate-400 uppercase tracking-widest">คะแนน ' + score + ' / ' + total + '</div></div>';
+
+    const safeLessonId = escapeJsString(currentLesson.LessonID);
+    if (passed) {
+        if (getLessonProgressStats(currentLesson).isCompleted) html += '<button onclick="downloadCertificate(\'' + safeLessonId + '\')" class="w-full px-6 py-4 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-all text-lg shadow-lg mb-3">🎓 ดาวน์โหลดใบประกาศ</button>';
+        html += '<button onclick="showView(\'lessonList\'); if(typeof renderLessonList === \'function\') renderLessonList(); if(typeof renderMyCourses === \'function\') renderMyCourses();" class="w-full px-6 py-4 ' + btnClass + ' text-white font-bold rounded-xl transition-all text-lg">' + btnText + '</button>';
+    } else {
+        html += '<button onclick="playSection(\'' + safeLessonId + '\', ' + currentSectionIndex + ')" class="w-full px-6 py-4 ' + btnClass + ' text-white font-bold rounded-xl transition-all text-lg">' + btnText + '</button>';
+    }
+    
+    html += '</div>';
+    views.quiz.innerHTML = html;
+}
+</script>
