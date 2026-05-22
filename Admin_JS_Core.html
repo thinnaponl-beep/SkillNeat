@@ -37,10 +37,10 @@ lessons.forEach(function(lesson) {
 
 if (!masterData || (!masterData.categories && !masterData.departments)) {
     masterData = {
-        mainCategories: ['1. About BeNeat|สร้างรากฐานความเข้าใจในองค์กร', '2. Operation & HR|ระบบปฏิบัติการและบริการบุคลากร'], 
-        categories: ['1. About BeNeat|The BeNeat Way|ประวัติ, วิสัยทัศน์, พันธกิจ', '1. About BeNeat|The BeNeat Family|โครงสร้างองค์กร'],
-        departments: ['ทั้งหมด (All)', 'ฝ่ายบุคคล', 'ฝ่ายขาย', 'ฝ่ายการตลาด'],
-        positions: ['ทั้งหมด (All)', 'พนักงาน', 'หัวหน้างาน', 'ผู้บริหาร']
+        mainCategories: ['1. About BeNeat|สร้างรากฐานความเข้าใจในองค์กร|0'], 
+        categories: ['1. About BeNeat|The BeNeat Way|ประวัติ, วิสัยทัศน์'],
+        departments: ['ทั้งหมด (All)', 'ส่วนกลาง'],
+        positions: ['ทั้งหมด (All)', 'พนักงานทั่วไป']
     };
 }
 
@@ -48,7 +48,9 @@ var activeLessonId = null;
 var activeSectionId = null;
 var currentEmailTags = []; 
 var currentAnswerTags = [];
-var activeMainCategoryForSetting = null; // JAVIS: ตัวแปรจำค่าหมวดหมู่หลักที่ถูกเลือก
+var currentDeptTags = [];
+var currentPosTags = [];
+var activeMainCategoryForSetting = null;
 
 function escapeHtml(unsafe) {
     return (unsafe || '').toString()
@@ -184,10 +186,9 @@ function closeModals() {
 }
 
 /* ==========================================
-   2. ระบบหน้า Settings (เพิ่ม/ลบ Master Data)
+   2. ระบบหน้า Settings (เพิ่ม/แก้ไข/ลบ Master Data)
 ========================================== */
 
-// JAVIS: ฟังก์ชันเมื่อคลิกการ์ดหมวดหมู่หลักทางซ้าย
 function selectSettingMainCategory(catName) {
     activeMainCategoryForSetting = catName;
     renderSettingsLists();
@@ -196,14 +197,15 @@ function selectSettingMainCategory(catName) {
 function addMainCategory() {
     const nameInput = document.getElementById('new-main-category-name');
     const descInput = document.getElementById('new-main-category-desc');
+    const isFeatInput = document.getElementById('new-main-category-featured');
     
     const name = nameInput ? nameInput.value.trim() : '';
     const desc = descInput ? descInput.value.trim() : '';
+    const isFeat = (isFeatInput && isFeatInput.checked) ? '1' : '0';
     
     if (!name) { showAdminToast('กรุณากรอกชื่อหมวดหมู่หลัก', 'warning'); return; }
 
-    const value = desc ? name + '|' + desc : name;
-    
+    const value = name + '|' + desc + '|' + isFeat;
     if (!masterData.mainCategories) masterData.mainCategories = [];
 
     const isExist = masterData.mainCategories.some(function(cat) {
@@ -215,14 +217,12 @@ function addMainCategory() {
         masterData.mainCategories.push(value);
         if(nameInput) nameInput.value = '';
         if(descInput) descInput.value = '';
+        if(isFeatInput) isFeatInput.checked = false;
         
         renderSettingsLists();
         showAdminToast('กำลังบันทึกข้อมูล...', 'success');
-        
         google.script.run.withSuccessHandler(function(res) {
-            if(res && res.status !== 'success') {
-                showAdminToast('ไม่สามารถเซฟลงชีตได้: ' + res.message, 'error');
-            }
+            if(res && res.status !== 'success') showAdminToast('ไม่สามารถเซฟลงชีตได้: ' + res.message, 'error');
         }).saveMasterData(masterData);
     } else {
         showAdminToast('มีชื่อหมวดหมู่หลักนี้ในระบบแล้ว', 'warning');
@@ -238,7 +238,6 @@ function addSubCategory() {
     if (!sub) { showAdminToast('กรุณากรอกชื่อหมวดหมู่ย่อย', 'warning'); return; }
 
     const value = desc ? parent + '|' + sub + '|' + desc : parent + '|' + sub;
-    
     if (!masterData.categories) masterData.categories = [];
 
     const isExist = masterData.categories.some(function(cat) {
@@ -255,67 +254,213 @@ function addSubCategory() {
         document.getElementById('new-category-desc').value = ''; 
         renderSettingsLists();
         showAdminToast('กำลังบันทึกข้อมูล...', 'success');
-        
         google.script.run.withSuccessHandler(function(res) {
-            if(res && res.status !== 'success') {
-                showAdminToast('ไม่สามารถเซฟลงชีตได้: ' + res.message, 'error');
-            }
+            if(res && res.status !== 'success') showAdminToast('ไม่สามารถเซฟลงชีตได้: ' + res.message, 'error');
         }).saveMasterData(masterData);
     } else {
         showAdminToast('มีหมวดหมู่ย่อยนี้ในหมวดหลักที่เลือกแล้ว', 'warning');
     }
 }
 
+function addMasterDataItem(type, inputId) {
+    const input = document.getElementById(inputId);
+    const value = input.value.trim();
+    if (!value) return;
+
+    if (!masterData[type]) masterData[type] = [];
+
+    if (masterData[type].indexOf(value) === -1) {
+        masterData[type].push(value);
+        input.value = '';
+        renderSettingsLists();
+        showAdminToast('กำลังบันทึกข้อมูล...', 'success');
+        google.script.run.withSuccessHandler(function(res) {
+            if(res && res.status !== 'success') showAdminToast('ไม่สามารถเซฟลงชีตได้: ' + res.message, 'error');
+        }).saveMasterData(masterData);
+    } else {
+        showAdminToast('มีข้อมูลนี้ในระบบแล้ว', 'warning');
+    }
+}
+
+function deleteMasterDataItem(type, value) {
+    showCustomConfirm({
+        title: 'ยืนยันการลบ',
+        message: 'ต้องการลบ <b>"' + escapeHtml(value.includes('|') ? value.replace(/\|/g, ' ') : value) + '"</b> ออกจากระบบใช่หรือไม่?',
+        type: 'danger',
+        confirmText: 'ลบข้อมูล',
+        onConfirm: function() {
+            masterData[type] = masterData[type].filter(function(item) { return item !== value; });
+            
+            if (type === 'mainCategories' && value.includes(activeMainCategoryForSetting)) {
+                activeMainCategoryForSetting = null;
+            }
+            
+            renderSettingsLists();
+            showAdminToast('กำลังลบข้อมูล...', 'success');
+            google.script.run.withSuccessHandler(function(res) {
+                if(res && res.status !== 'success') showAdminToast('ไม่สามารถเซฟลงชีตได้: ' + res.message, 'error');
+            }).saveMasterData(masterData);
+        }
+    });
+}
+
+function openEditCategoryModal(type, oldVal, parentVal) {
+    document.getElementById('edit-category-type').value = type;
+    document.getElementById('edit-category-old-val').value = oldVal;
+    document.getElementById('edit-category-parent').value = parentVal || '';
+    
+    let name = oldVal;
+    let desc = '';
+    let isFeat = '0';
+    
+    if (type === 'mainCategories' || type === 'categories') {
+        if (oldVal.includes('|')) {
+            const parts = oldVal.split('|');
+            if (type === 'categories') {
+                name = parts[1];
+                desc = parts.length > 2 ? parts[2] : '';
+            } else {
+                name = parts[0];
+                desc = parts.length > 1 ? parts[1] : '';
+                isFeat = parts.length > 2 ? parts[2] : '0';
+            }
+        }
+    }
+    
+    document.getElementById('edit-category-name').value = name;
+    document.getElementById('edit-category-desc').value = desc;
+    
+    if (type === 'departments' || type === 'positions') {
+        document.getElementById('edit-category-desc-container').classList.add('hidden');
+    } else {
+        document.getElementById('edit-category-desc-container').classList.remove('hidden');
+    }
+
+    if (type === 'mainCategories') {
+        document.getElementById('edit-category-featured-container').classList.remove('hidden');
+        document.getElementById('edit-category-featured-container').classList.add('flex');
+        document.getElementById('edit-category-featured').checked = (isFeat === '1');
+    } else {
+        document.getElementById('edit-category-featured-container').classList.add('hidden');
+        document.getElementById('edit-category-featured-container').classList.remove('flex');
+    }
+    
+    document.getElementById('edit-category-modal').classList.remove('hidden');
+    setTimeout(() => {
+        document.getElementById('edit-category-form').classList.remove('opacity-0', 'scale-95');
+    }, 10);
+}
+
+function closeEditCategoryModal() {
+    document.getElementById('edit-category-form').classList.add('opacity-0', 'scale-95');
+    setTimeout(() => {
+        document.getElementById('edit-category-modal').classList.add('hidden');
+    }, 300);
+}
+
+function saveEditedCategory(e) {
+    e.preventDefault();
+    const type = document.getElementById('edit-category-type').value;
+    const oldVal = document.getElementById('edit-category-old-val').value;
+    const parentVal = document.getElementById('edit-category-parent').value;
+    const newName = document.getElementById('edit-category-name').value.trim();
+    const newDesc = document.getElementById('edit-category-desc').value.trim();
+    
+    if (!newName) return;
+    
+    let newVal = newName;
+    if (type === 'mainCategories') {
+        const isFeat = document.getElementById('edit-category-featured').checked ? '1' : '0';
+        newVal = newName + '|' + newDesc + '|' + isFeat;
+    } else if (type === 'categories') {
+        newVal = newDesc ? parentVal + '|' + newName + '|' + newDesc : parentVal + '|' + newName;
+    }
+    
+    const idx = masterData[type].indexOf(oldVal);
+    if (idx > -1) {
+        masterData[type][idx] = newVal;
+        
+        if (type === 'mainCategories') {
+            const oldMainName = oldVal.includes('|') ? oldVal.split('|')[0] : oldVal;
+            if (oldMainName !== newName && masterData.categories) {
+                masterData.categories = masterData.categories.map(function(cat) {
+                    if (cat.startsWith(oldMainName + '|')) {
+                        return cat.replace(oldMainName + '|', newName + '|');
+                    }
+                    return cat;
+                });
+            }
+            if (activeMainCategoryForSetting === oldMainName) {
+                activeMainCategoryForSetting = newName;
+            }
+        }
+        
+        renderSettingsLists();
+        closeEditCategoryModal();
+        showAdminToast('บันทึกการแก้ไขเรียบร้อย', 'success');
+        
+        google.script.run.saveMasterData(masterData);
+    }
+}
+
 function renderSettingsLists() {
-    // 1. หมวดหมู่หลัก (Main Categories - แสดงแบบการ์ดคลิกได้)
+    const editIcon = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>';
+    const delIcon = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>';
+    const dragIcon = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"></path></svg>';
+
+    // 1. หมวดหมู่หลัก
     let mainCatHtml = '';
     if (masterData.mainCategories) {
         masterData.mainCategories.forEach(function(item) {
             let catName = item;
             let catDesc = '';
+            let isFeat = '0';
             if(item.includes('|')) {
                 const parts = item.split('|');
                 catName = parts[0];
-                catDesc = parts[1];
+                catDesc = parts[1] || '';
+                isFeat = parts.length > 2 ? parts[2] : '0';
             }
             
             const isActive = (activeMainCategoryForSetting === catName);
             const activeClass = isActive ? 'ring-2 ring-[#31c1d7] bg-[#31c1d7]/5 border-[#31c1d7]' : 'bg-white border-slate-200 hover:border-[#31c1d7]/50 hover:shadow-md';
+            const featBadge = isFeat === '1' ? '<span class="ml-2 text-[10px] bg-rose-100 text-rose-600 px-2 py-0.5 rounded border border-rose-200 flex-shrink-0">⭐ แนะนำ</span>' : '';
             
             mainCatHtml += '<div class="p-4 rounded-2xl shadow-sm border transition-all cursor-pointer flex justify-between items-center mb-3 ' + activeClass + '" onclick="selectSettingMainCategory(\'' + escapeJsString(catName) + '\')">' +
                 '<div class="flex flex-col flex-grow overflow-hidden pr-2">' +
-                    '<span class="text-[15px] font-bold text-slate-800 truncate">' + escapeHtml(catName) + '</span>' +
+                    '<span class="text-[15px] font-bold text-slate-800 flex items-center truncate">' + escapeHtml(catName) + featBadge + '</span>' +
                     (catDesc ? '<span class="text-[11px] text-slate-500 mt-1 line-clamp-2 leading-tight">' + escapeHtml(catDesc) + '</span>' : '') +
                 '</div>' +
-                '<button onclick="event.stopPropagation(); deleteMasterDataItem(\'mainCategories\', \'' + escapeJsString(item) + '\')" class="p-2 text-slate-400 hover:text-red-500 flex-shrink-0 ml-2 hover:bg-red-50 rounded-lg transition-colors" title="ลบหมวดหมู่นี้"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>' +
+                '<div class="flex space-x-1 flex-shrink-0">' +
+                    '<button onclick="event.stopPropagation(); openEditCategoryModal(\'mainCategories\', \'' + escapeJsString(item) + '\', \'\')" class="p-2 text-slate-400 hover:text-[#31c1d7] hover:bg-[#31c1d7]/10 rounded-lg transition-colors" title="แก้ไข">' + editIcon + '</button>' +
+                    '<button onclick="event.stopPropagation(); deleteMasterDataItem(\'mainCategories\', \'' + escapeJsString(item) + '\')" class="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="ลบ">' + delIcon + '</button>' +
+                '</div>' +
                 '</div>';
         });
     }
     const mainCatContainer = document.getElementById('settings-main-categories-list');
     if(mainCatContainer) mainCatContainer.innerHTML = mainCatHtml;
 
-    // 2. หมวดหมู่ย่อย (Categories - แสดงตาม Main ที่เลือก)
+    // 2. หมวดหมู่ย่อย
     let catHtml = '';
     const subCatAddContainer = document.getElementById('sub-category-add-container');
     const subCatHeaderTitle = document.getElementById('sub-category-header-title');
 
     if (!activeMainCategoryForSetting) {
-        // ถ้ายังไม่ได้คลิกเลือกการ์ดด้านซ้าย ให้ซ่อนกล่องเพิ่มข้อมูล และโชว์ข้อความเตือน
         if(subCatAddContainer) subCatAddContainer.classList.add('hidden');
         if(subCatHeaderTitle) subCatHeaderTitle.innerHTML = '🏷️ หมวดหมู่ย่อย';
         catHtml = '<div class="text-center py-12 px-4 text-slate-400 text-sm font-medium border border-dashed border-slate-200 rounded-2xl bg-white/50 mt-4">กรุณาคลิกเลือกการ์ด <b>หมวดหมู่หลัก</b> ทางซ้ายมือก่อน<br>เพื่อดูและเพิ่มหมวดหมู่ย่อยครับ</div>';
     } else {
-        // ถ้าเลือกแล้ว ให้เปิดกล่องเพิ่มข้อมูล และอัปเดต Header เป็นชื่อหมวดหลัก
-        if(subCatAddContainer) subCatAddContainer.classList.remove('hidden');
-        if(subCatAddContainer) subCatAddContainer.classList.add('flex');
+        if(subCatAddContainer) {
+            subCatAddContainer.classList.remove('hidden');
+            subCatAddContainer.classList.add('flex');
+        }
         if(subCatHeaderTitle) subCatHeaderTitle.innerHTML = '🏷️ หมวดหมู่ย่อยของ: <span class="text-indigo-600">' + escapeHtml(activeMainCategoryForSetting) + '</span>';
 
         if (masterData.categories) {
             const filteredCategories = masterData.categories.filter(function(item) {
                 let parentName = '';
-                if(item.includes('|')) {
-                    parentName = item.split('|')[0];
-                }
+                if(item.includes('|')) parentName = item.split('|')[0];
                 return parentName === activeMainCategoryForSetting;
             });
 
@@ -333,43 +478,88 @@ function renderSettingsLists() {
                     }
                     
                     let displayTxt = '<div class="flex items-start">' +
-                                        '<div class="w-6 h-6 rounded-md bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs flex-shrink-0 mt-0.5 mr-3">' + (idx + 1) + '</div>' +
-                                        '<div class="flex flex-col w-full overflow-hidden pr-2">' +
+                                        '<div class="drag-handle cursor-move p-2 text-slate-300 hover:text-indigo-500 mr-1 mt-0.5" title="ลากเพื่อจัดลำดับ">' + dragIcon + '</div>' +
+                                        '<div class="w-6 h-6 rounded-md bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs flex-shrink-0 mt-1 mr-3">' + (idx + 1) + '</div>' +
+                                        '<div class="flex flex-col w-full overflow-hidden pr-2 pt-1">' +
                                             '<span class="font-bold text-slate-700 text-[14px] truncate">' + escapeHtml(subName) + '</span>' +
                                             (subDesc ? '<span class="text-xs text-slate-500 mt-1 leading-tight line-clamp-2">' + escapeHtml(subDesc) + '</span>' : '') +
                                         '</div>' +
                                      '</div>';
                     
-                    catHtml += '<div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-start hover:border-indigo-300 transition-colors mb-3">' +
+                    catHtml += '<div class="subcat-item bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-start hover:border-indigo-300 transition-colors mb-3" data-val="' + escapeHtml(item) + '">' +
                         '<div class="w-full overflow-hidden">' + displayTxt + '</div>' +
-                        '<button onclick="deleteMasterDataItem(\'categories\', \'' + escapeJsString(item) + '\')" class="p-1.5 text-slate-400 hover:text-red-500 flex-shrink-0 mt-0.5 hover:bg-red-50 rounded-lg transition-colors" title="ลบหมวดหมู่ย่อยนี้"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>' +
+                        '<div class="flex space-x-1 flex-shrink-0 pt-1">' +
+                            '<button onclick="event.stopPropagation(); openEditCategoryModal(\'categories\', \'' + escapeJsString(item) + '\', \'' + escapeJsString(activeMainCategoryForSetting) + '\')" class="p-1.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors" title="แก้ไข">' + editIcon + '</button>' +
+                            '<button onclick="deleteMasterDataItem(\'categories\', \'' + escapeJsString(item) + '\')" class="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="ลบ">' + delIcon + '</button>' +
+                        '</div>' +
                         '</div>';
                 });
             }
         }
     }
     const catContainer = document.getElementById('settings-categories-list');
-    if(catContainer) catContainer.innerHTML = catHtml;
+    if(catContainer) {
+        catContainer.innerHTML = catHtml;
+        
+        // ผูก SortableJS ให้ลากสลับลำดับหมวดหมู่ย่อยได้
+        if (activeMainCategoryForSetting && typeof Sortable !== 'undefined') {
+            if (window.catSortable) { window.catSortable.destroy(); }
+            window.catSortable = new Sortable(catContainer, {
+                animation: 150,
+                ghostClass: 'sortable-ghost',
+                handle: '.drag-handle',
+                onEnd: function(evt) {
+                    const newOrderVals = [];
+                    catContainer.querySelectorAll('.subcat-item').forEach(function(el) {
+                        newOrderVals.push(el.getAttribute('data-val'));
+                    });
+                    
+                    // เอาหมวดที่ไม่ได้ถูกเลือกออกมาไว้ก่อน
+                    const otherCategories = masterData.categories.filter(function(c) { 
+                        return c.split('|')[0] !== activeMainCategoryForSetting; 
+                    });
+                    
+                    // นำที่เรียงใหม่ไปต่อท้าย
+                    masterData.categories = otherCategories.concat(newOrderVals);
+                    
+                    google.script.run.saveMasterData(masterData);
+                    showAdminToast('จัดลำดับเรียบร้อย', 'success');
+                    
+                    setTimeout(renderSettingsLists, 400); 
+                }
+            });
+        }
+    }
 
     // 3. แผนก
     let deptHtml = '';
     if (masterData.departments) {
         masterData.departments.forEach(function(item) {
-            const deleteBtn = item === 'ทั้งหมด (All)' ? '' : '<button onclick="deleteMasterDataItem(\'departments\', \'' + escapeJsString(item) + '\')" class="text-red-400 hover:text-red-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>';
+            const btns = item === 'ทั้งหมด (All)' ? '' : 
+                '<div class="flex space-x-1">' +
+                '<button onclick="openEditCategoryModal(\'departments\', \'' + escapeJsString(item) + '\')" class="text-slate-400 hover:text-[#31c1d7] p-1">' + editIcon + '</button>' +
+                '<button onclick="deleteMasterDataItem(\'departments\', \'' + escapeJsString(item) + '\')" class="text-slate-400 hover:text-red-500 p-1">' + delIcon + '</button>' +
+                '</div>';
+            
             deptHtml += '<div class="flex justify-between items-center bg-slate-50 px-3 py-2 rounded-lg border border-slate-100 mb-2">' +
-                '<span class="text-sm font-medium text-slate-700">' + escapeHtml(item) + '</span>' + deleteBtn + '</div>';
+                '<span class="text-sm font-medium text-slate-700">' + escapeHtml(item) + '</span>' + btns + '</div>';
         });
     }
     const deptContainer = document.getElementById('settings-departments-list');
     if(deptContainer) deptContainer.innerHTML = deptHtml;
 
-    // 4. ตำแหน่ง
+    // 4. ตำแหน่ง / ระดับ
     let posHtml = '';
     if (masterData.positions) {
         masterData.positions.forEach(function(item) {
-            const deleteBtn = item === 'ทั้งหมด (All)' ? '' : '<button onclick="deleteMasterDataItem(\'positions\', \'' + escapeJsString(item) + '\')" class="text-red-400 hover:text-red-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>';
+            const btns = item === 'ทั้งหมด (All)' ? '' : 
+                '<div class="flex space-x-1">' +
+                '<button onclick="openEditCategoryModal(\'positions\', \'' + escapeJsString(item) + '\')" class="text-slate-400 hover:text-[#31c1d7] p-1">' + editIcon + '</button>' +
+                '<button onclick="deleteMasterDataItem(\'positions\', \'' + escapeJsString(item) + '\')" class="text-slate-400 hover:text-red-500 p-1">' + delIcon + '</button>' +
+                '</div>';
+                
             posHtml += '<div class="flex justify-between items-center bg-slate-50 px-3 py-2 rounded-lg border border-slate-100 mb-2">' +
-                '<span class="text-sm font-medium text-slate-700">' + escapeHtml(item) + '</span>' + deleteBtn + '</div>';
+                '<span class="text-sm font-medium text-slate-700">' + escapeHtml(item) + '</span>' + btns + '</div>';
         });
     }
     const posContainer = document.getElementById('settings-positions-list');
@@ -378,46 +568,17 @@ function renderSettingsLists() {
     renderMasterDataOptions();
 }
 
-function deleteMasterDataItem(type, value) {
-    showCustomConfirm({
-        title: 'ยืนยันการลบ',
-        message: 'ต้องการลบ <b>"' + escapeHtml(value.includes('|') ? value.replace(/\|/g, ' ') : value) + '"</b> ออกจากระบบใช่หรือไม่?',
-        type: 'danger',
-        confirmText: 'ลบข้อมูล',
-        onConfirm: function() {
-            masterData[type] = masterData[type].filter(function(item) { return item !== value; });
-            
-            // หากลบหมวดหลักที่กำลังถูกเลือกอยู่ ให้เคลียร์ค่าให้เป็นค่าว่าง (เพื่อให้กล่องขวาถูกซ่อน)
-            if (type === 'mainCategories' && value.includes(activeMainCategoryForSetting)) {
-                activeMainCategoryForSetting = null;
-            }
-            
-            renderSettingsLists();
-            showAdminToast('กำลังลบข้อมูล...', 'success');
-            
-            google.script.run.withSuccessHandler(function(res) {
-                if(res && res.status !== 'success') {
-                    showAdminToast('ไม่สามารถเซฟลงชีตได้: ' + res.message, 'error');
-                }
-            }).saveMasterData(masterData);
-        }
-    });
-}
-
 function renderMasterDataOptions() {
-    // 1. หมวดหมู่หลัก (สำหรับหน้า แก้ไขคอร์สเรียน)
     const mainCatSelect = document.getElementById('lesson-main-category');
-    
-    if (masterData.mainCategories) {
+    if (masterData.mainCategories && mainCatSelect) {
         let mainCatHtml = '<option value="">-- เลือกหมวดหมู่หลัก --</option>';
         masterData.mainCategories.forEach(function(cat) {
             const catName = cat.includes('|') ? cat.split('|')[0] : cat;
             mainCatHtml += '<option value="' + escapeHtml(catName) + '">' + escapeHtml(catName) + '</option>';
         });
-        if(mainCatSelect) mainCatSelect.innerHTML = mainCatHtml;
+        mainCatSelect.innerHTML = mainCatHtml;
     }
 
-    // 2. หมวดหมู่ย่อย (สำหรับช่องค้นหา/Filter คอร์สในหน้า Dashboard ของแอดมิน)
     const adminFilterSelect = document.getElementById('admin-lesson-category');
     if (adminFilterSelect && masterData.categories) {
         let filterHtml = '<option value="">ทุกหมวดหมู่</option>';
@@ -429,21 +590,8 @@ function renderMasterDataOptions() {
         adminFilterSelect.innerHTML = filterHtml; 
     }
 
-    // 3. แผนกและตำแหน่ง
-    const deptContainer = document.getElementById('lesson-departments-container');
     const userDeptFilter = document.getElementById('admin-users-dept-filter');
     if (masterData.departments) {
-        if(deptContainer) {
-            let deptHtml = '';
-            masterData.departments.forEach(function(dept) {
-                deptHtml += '<label class="flex items-center space-x-3 cursor-pointer p-1.5 hover:bg-slate-100 rounded-lg">' +
-                    '<input type="checkbox" name="target-dept" value="' + escapeHtml(dept) + '" class="w-4 h-4 text-[#31c1d7] rounded border-slate-300 focus:ring-[#31c1d7]">' +
-                    '<span class="text-sm text-slate-700 font-medium">' + escapeHtml(dept) + '</span>' +
-                    '</label>';
-            });
-            deptContainer.innerHTML = deptHtml;
-        }
-        
         if(userDeptFilter) {
             let uDeptHtml = '<option value="">ทุกแผนก</option>';
             masterData.departments.forEach(function(dept) {
@@ -462,22 +610,10 @@ function renderMasterDataOptions() {
         }
     }
 
-    const posContainer = document.getElementById('lesson-positions-container');
     const userPosFilter = document.getElementById('admin-users-pos-filter');
     if (masterData.positions) {
-        if(posContainer) {
-            let posHtml = '';
-            masterData.positions.forEach(function(pos) {
-                posHtml += '<label class="flex items-center space-x-3 cursor-pointer p-1.5 hover:bg-slate-100 rounded-lg">' +
-                    '<input type="checkbox" name="target-pos" value="' + escapeHtml(pos) + '" class="w-4 h-4 text-[#31c1d7] rounded border-slate-300 focus:ring-[#31c1d7]">' +
-                    '<span class="text-sm text-slate-700 font-medium">' + escapeHtml(pos) + '</span>' +
-                    '</label>';
-            });
-            posContainer.innerHTML = posHtml;
-        }
-
         if(userPosFilter) {
-            let uPosHtml = '<option value="">ทุกตำแหน่ง</option>';
+            let uPosHtml = '<option value="">ทุกระดับ (Level)</option>';
             masterData.positions.forEach(function(pos) {
                 if (pos !== 'ทั้งหมด (All)') uPosHtml += '<option value="' + escapeHtml(pos) + '">' + escapeHtml(pos) + '</option>';
             });
@@ -496,66 +632,153 @@ function renderMasterDataOptions() {
 }
 
 /* ==========================================
-   ฟังก์ชันจัดการระบบ Tag (ใช้งานร่วมกัน)
+   ฟังก์ชันจัดการระบบ Tag (แผนก, ตำแหน่ง, อีเมล, เฉลย)
 ========================================== */
+
+// --- แผนก (Dept) ---
+function renderDeptTags() {
+    const wrapper = document.getElementById('selected-dept-tags');
+    if(!wrapper) return;
+    wrapper.innerHTML = '';
+    currentDeptTags.forEach(function(dept) {
+        const tag = document.createElement('span');
+        tag.className = 'inline-flex items-center px-2.5 py-1 rounded-md text-sm font-medium bg-[#31c1d7]/10 text-[#31c1d7] border border-[#31c1d7]/20 shadow-sm';
+        tag.innerHTML = escapeHtml(dept) + '<button type="button" onclick="removeDeptTag(\'' + escapeHtml(dept) + '\')" class="ml-1.5 inline-flex text-[#31c1d7] hover:text-red-500 focus:outline-none"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>';
+        wrapper.appendChild(tag);
+    });
+}
+window.addDeptTag = function(dept) {
+    if (dept && currentDeptTags.indexOf(dept) === -1) {
+        if (dept === 'ทั้งหมด (All)') currentDeptTags = ['ทั้งหมด (All)'];
+        else {
+            currentDeptTags = currentDeptTags.filter(function(d) { return d !== 'ทั้งหมด (All)'; });
+            currentDeptTags.push(dept);
+        }
+        renderDeptTags();
+    }
+    const input = document.getElementById('search-dept-input');
+    if(input) { input.value = ''; input.focus(); }
+    const sugBox = document.getElementById('dept-suggestions');
+    if(sugBox) sugBox.classList.add('hidden');
+};
+window.removeDeptTag = function(dept) {
+    currentDeptTags = currentDeptTags.filter(function(d) { return d !== dept; });
+    renderDeptTags();
+};
+
+// --- ตำแหน่ง (Pos) ---
+function renderPosTags() {
+    const wrapper = document.getElementById('selected-pos-tags');
+    if(!wrapper) return;
+    wrapper.innerHTML = '';
+    currentPosTags.forEach(function(pos) {
+        const tag = document.createElement('span');
+        tag.className = 'inline-flex items-center px-2.5 py-1 rounded-md text-sm font-medium bg-[#31c1d7]/10 text-[#31c1d7] border border-[#31c1d7]/20 shadow-sm';
+        tag.innerHTML = escapeHtml(pos) + '<button type="button" onclick="removePosTag(\'' + escapeHtml(pos) + '\')" class="ml-1.5 inline-flex text-[#31c1d7] hover:text-red-500 focus:outline-none"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>';
+        wrapper.appendChild(tag);
+    });
+}
+window.addPosTag = function(pos) {
+    if (pos && currentPosTags.indexOf(pos) === -1) {
+        if (pos === 'ทั้งหมด (All)') currentPosTags = ['ทั้งหมด (All)'];
+        else {
+            currentPosTags = currentPosTags.filter(function(p) { return p !== 'ทั้งหมด (All)'; });
+            currentPosTags.push(pos);
+        }
+        renderPosTags();
+    }
+    const input = document.getElementById('search-pos-input');
+    if(input) { input.value = ''; input.focus(); }
+    const sugBox = document.getElementById('pos-suggestions');
+    if(sugBox) sugBox.classList.add('hidden');
+};
+window.removePosTag = function(pos) {
+    currentPosTags = currentPosTags.filter(function(p) { return p !== pos; });
+    renderPosTags();
+};
+
+// --- อีเมล ---
 function renderEmailTags() {
     const wrapper = document.getElementById('email-tags-wrapper');
     if(!wrapper) return;
     wrapper.innerHTML = '';
     currentEmailTags.forEach(function(email) {
         const tag = document.createElement('span');
-        tag.className = 'inline-flex items-center px-2.5 py-1 rounded-md text-sm font-medium bg-[#31c1d7]/10 text-[#31c1d7] border border-[#31c1d7]/20';
-        tag.innerHTML = escapeHtml(email) + '<button type="button" onclick="removeEmailTag(\'' + escapeHtml(email) + '\')" class="ml-1.5 inline-flex text-[#31c1d7] hover:text-red-500 focus:outline-none"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>';
+        tag.className = 'inline-flex items-center px-2.5 py-1 rounded-md text-sm font-medium bg-indigo-100 text-indigo-700 border border-indigo-200 shadow-sm';
+        tag.innerHTML = escapeHtml(email) + '<button type="button" onclick="removeEmailTag(\'' + escapeHtml(email) + '\')" class="ml-1.5 inline-flex text-indigo-500 hover:text-red-500 focus:outline-none"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>';
         wrapper.appendChild(tag);
     });
 }
-
-function addEmailTag(emailStr) {
+window.addEmailTag = function(emailStr) {
     const emails = emailStr.split(/[\s,]+/).map(function(s) { return s.trim().toLowerCase(); }).filter(Boolean);
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     let hasInvalid = false;
     emails.forEach(function(email) {
-        if (currentEmailTags.indexOf(email) === -1) {
+        if (!currentEmailTags.includes(email)) {
             if (emailRegex.test(email)) currentEmailTags.push(email);
             else hasInvalid = true;
         }
     });
     if(hasInvalid) showAdminToast('ข้ามอีเมลรูปแบบไม่ถูกต้อง', 'warning');
     renderEmailTags();
-    document.getElementById('lesson-email-input').value = '';
-}
-
-function removeEmailTag(email) {
+    
+    const emailInput = document.getElementById('lesson-email-input');
+    if(emailInput) emailInput.value = '';
+};
+window.removeEmailTag = function(email) {
     currentEmailTags = currentEmailTags.filter(function(e) { return e !== email; });
     renderEmailTags();
-}
+};
+window.selectEmailSuggestion = function(email) {
+    addEmailTag(email);
+    const input = document.getElementById('lesson-email-input');
+    if(input) { input.value = ''; input.focus(); }
+    const emailSuggestions = document.getElementById('email-suggestions');
+    if(emailSuggestions) emailSuggestions.classList.add('hidden');
+};
 
+// --- เฉลยข้อสอบอัตนัย ---
 function renderAnswerTags() {
     const wrapper = document.getElementById('answer-tags-wrapper');
     if(!wrapper) return;
     wrapper.innerHTML = '';
     currentAnswerTags.forEach(function(tag) {
         const span = document.createElement('span');
-        span.className = 'inline-flex items-center px-2.5 py-1 rounded-md text-sm font-medium bg-blue-100 text-blue-700 border border-blue-200';
+        span.className = 'inline-flex items-center px-2.5 py-1 rounded-md text-sm font-medium bg-blue-100 text-blue-700 border border-blue-200 shadow-sm';
         span.innerHTML = escapeHtml(tag) + '<button type="button" onclick="removeAnswerTag(\'' + escapeHtml(tag) + '\')" class="ml-1.5 inline-flex text-blue-500 hover:text-red-500 focus:outline-none"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>';
         wrapper.appendChild(span);
     });
 }
-
 function addAnswerTag(tagStr) {
     const tags = tagStr.split(/[,]+/).map(function(s) { return s.trim(); }).filter(Boolean);
     tags.forEach(function(tag) {
-        if (currentAnswerTags.indexOf(tag) === -1) {
-            currentAnswerTags.push(tag);
-        }
+        if (currentAnswerTags.indexOf(tag) === -1) currentAnswerTags.push(tag);
     });
     renderAnswerTags();
     document.getElementById('subjective-answer-input').value = '';
 }
-
 function removeAnswerTag(tag) {
     currentAnswerTags = currentAnswerTags.filter(function(t) { return t !== tag; });
     renderAnswerTags();
+}
+
+function renderSuggestions(val, list, container, funcName) {
+    const query = val.trim().toLowerCase();
+    let matches = list;
+    if (query) {
+        matches = list.filter(function(item) { return String(item).toLowerCase().includes(query); });
+    }
+    if (matches.length > 0) {
+        let html = '';
+        matches.forEach(function(m) {
+            html += '<div class="px-4 py-2 hover:bg-[#31c1d7]/10 cursor-pointer text-sm font-medium text-slate-700 border-b border-slate-50 last:border-0 transition-colors" onmousedown="' + funcName + '(\'' + escapeJsString(m) + '\')">' + escapeHtml(m) + '</div>';
+        });
+        container.innerHTML = html;
+        container.classList.remove('hidden');
+    } else {
+        container.innerHTML = '<div class="px-4 py-3 text-sm text-slate-400 text-center font-medium border-dashed border border-slate-200 m-2 rounded-xl">ไม่พบข้อมูล</div>';
+        container.classList.remove('hidden');
+    }
 }
 
 function setupEventListeners() {
@@ -569,13 +792,92 @@ function setupEventListeners() {
     if(quizForm) quizForm.addEventListener('submit', saveQuiz);
     if(userForm) userForm.addEventListener('submit', saveUser);
     
+    const deptInput = document.getElementById('search-dept-input');
+    const deptSug = document.getElementById('dept-suggestions');
+    if (deptInput && deptSug) {
+        deptInput.addEventListener('focus', function() { renderSuggestions('', masterData.departments || [], deptSug, 'addDeptTag'); });
+        deptInput.addEventListener('input', function() { renderSuggestions(this.value, masterData.departments || [], deptSug, 'addDeptTag'); });
+        deptInput.addEventListener('blur', function() { setTimeout(function() { deptSug.classList.add('hidden'); }, 200); });
+    }
+    
+    const posInput = document.getElementById('search-pos-input');
+    const posSug = document.getElementById('pos-suggestions');
+    if (posInput && posSug) {
+        posInput.addEventListener('focus', function() { renderSuggestions('', masterData.positions || [], posSug, 'addPosTag'); });
+        posInput.addEventListener('input', function() { renderSuggestions(this.value, masterData.positions || [], posSug, 'addPosTag'); });
+        posInput.addEventListener('blur', function() { setTimeout(function() { posSug.classList.add('hidden'); }, 200); });
+    }
+
     const emailInput = document.getElementById('lesson-email-input');
+    const emailSuggestions = document.getElementById('email-suggestions');
     if (emailInput) {
         emailInput.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' || e.key === ' ' || e.key === ',') { e.preventDefault(); addEmailTag(this.value); }
-            if (e.key === 'Backspace' && this.value === '' && currentEmailTags.length > 0) { currentEmailTags.pop(); renderEmailTags(); }
+            if (e.key === 'Enter' || e.key === ',') { 
+                e.preventDefault(); 
+                if (this.value.trim() !== '') addEmailTag(this.value); 
+                if(emailSuggestions) emailSuggestions.classList.add('hidden');
+            }
+            if (e.key === 'Backspace' && this.value === '' && currentEmailTags.length > 0) { 
+                currentEmailTags.pop(); 
+                renderEmailTags(); 
+            }
         });
-        emailInput.addEventListener('blur', function() { addEmailTag(this.value); });
+        
+        emailInput.addEventListener('focus', function(e) {
+            const matches = users.slice(0, 10);
+            if (matches.length > 0) {
+                let html = '';
+                matches.forEach(function(u) {
+                    const name = u.FullName || u.Nickname || 'ไม่มีชื่อ';
+                    html += '<div class="px-4 py-2.5 hover:bg-[#31c1d7]/10 cursor-pointer border-b border-slate-50 last:border-0 transition-colors" onmousedown="selectEmailSuggestion(\'' + escapeJsString(u.Email) + '\')">' +
+                        '<div class="font-bold text-sm text-slate-700">' + escapeHtml(name) + '</div>' +
+                        '<div class="text-xs text-slate-500">' + escapeHtml(u.Email) + '</div>' +
+                    '</div>';
+                });
+                if(emailSuggestions) {
+                    emailSuggestions.innerHTML = html;
+                    emailSuggestions.classList.remove('hidden');
+                }
+            }
+        });
+
+        emailInput.addEventListener('input', function(e) {
+            const val = this.value.trim().toLowerCase();
+            if (!val || !emailSuggestions) {
+                if(emailSuggestions) emailSuggestions.classList.add('hidden');
+                return;
+            }
+            
+            const matches = users.filter(function(u) {
+                const eMail = String(u.Email || '').toLowerCase();
+                const nName = String(u.FullName || '').toLowerCase();
+                const nick = String(u.Nickname || '').toLowerCase();
+                return eMail.includes(val) || nName.includes(val) || nick.includes(val);
+            }).slice(0, 10); 
+            
+            if (matches.length > 0) {
+                let html = '';
+                matches.forEach(function(u) {
+                    const name = u.FullName || u.Nickname || 'ไม่มีชื่อ';
+                    html += '<div class="px-4 py-2.5 hover:bg-[#31c1d7]/10 cursor-pointer border-b border-slate-50 last:border-0 transition-colors" onmousedown="selectEmailSuggestion(\'' + escapeJsString(u.Email) + '\')">' +
+                        '<div class="font-bold text-sm text-slate-700">' + escapeHtml(name) + '</div>' +
+                        '<div class="text-xs text-slate-500">' + escapeHtml(u.Email) + '</div>' +
+                    '</div>';
+                });
+                emailSuggestions.innerHTML = html;
+                emailSuggestions.classList.remove('hidden');
+            } else {
+                emailSuggestions.innerHTML = '<div class="px-4 py-3 text-sm text-slate-400 text-center font-medium border-dashed border border-slate-200 m-2 rounded-xl">ไม่พบรายชื่อพนักงาน</div>';
+                emailSuggestions.classList.remove('hidden');
+            }
+        });
+
+        emailInput.addEventListener('blur', function() { 
+            setTimeout(function() {
+                if (emailInput.value.trim() !== '') addEmailTag(emailInput.value); 
+                if(emailSuggestions) emailSuggestions.classList.add('hidden');
+            }, 200);
+        });
     }
 
     const answerInput = document.getElementById('subjective-answer-input');
