@@ -1,5 +1,5 @@
 // ===============================================================
-// FILE: Code.gs
+// FILE: Code.gs (Full Complete Version)
 // ===============================================================
 
 const SPREADSHEET_ID = '15r5QIYPTfPem1qJEltcZw1mu2LO_N4N9pFAPkQDR5sg'; 
@@ -22,7 +22,7 @@ function doGet(e){
   const permissions = getCurrentUserPermissions(userEmail);
   const page = e.parameter.page;
   
-  let userProfile = { Email: userEmail, FullName: '', Nickname: '', Department: 'General', Position: '', ProfileImage: '', ManualBN: 0 };
+  let userProfile = { Email: userEmail, FullName: '', Nickname: '', Department: 'General', Position: 'พนักงานทั่วไป', JobTitle: '', ProfileImage: '', ManualBN: 0 };
   const profiles = getSheetData(USER_PROFILES_SHEET_NAME);
   if (profiles && profiles.length > 0) {
      const found = profiles.find(p => String(p.Email).trim().toLowerCase() === userEmail);
@@ -85,22 +85,44 @@ function include(filename) {
 // ระบบ HELPER (ฟังก์ชันช่วยเหลือต่างๆ)
 // ----------------------------------------------------
 function getSheetData(sheetName) {
+  const cache = CacheService.getScriptCache();
+  const cacheKey = 'CACHE_SHEET_' + sheetName;
+  
+  const cacheableSheets = [LESSONS_SHEET_NAME, SECTIONS_SHEET_NAME, QUIZZES_SHEET_NAME, 'Settings'];
+  
+  if (cacheableSheets.includes(sheetName)) {
+      const cachedData = cache.get(cacheKey);
+      if (cachedData) {
+          try { return JSON.parse(cachedData); } catch(e) {}
+      }
+  }
+
   try {
     const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(sheetName);
     if (!sheet) {
       if (sheetName === EXTERNAL_PROOFS_SHEET_NAME || sheetName === MANUAL_SCORES_SHEET_NAME) return []; 
       throw new Error(`Sheet "${sheetName}" not found.`);
     }
+    
     const rows = sheet.getDataRange().getValues();
     if (rows.length === 0) return [];
     const headers = rows.shift();
-    return rows.map(row => {
+    const data = rows.map(row => {
       const obj = {};
       headers.forEach((header, index) => {
         obj[header] = row[index];
       });
       return obj;
     });
+
+    if (cacheableSheets.includes(sheetName)) {
+        const jsonString = JSON.stringify(data);
+        if (jsonString.length < 100000) {
+            cache.put(cacheKey, jsonString, 60); 
+        }
+    }
+
+    return data;
   } catch (e) {
     console.error(`Error getting data from sheet "${sheetName}": ${e.toString()}`);
     return [];
@@ -141,12 +163,36 @@ function ensureManualScoresSheet() {
   return sheet;
 }
 
-function isDateInPeriod(dateString, period) {
+function isDateInPeriod(dateObj, period) {
   if (!period || period === 'all') return true;
-  if (!dateString) return false;
+  if (!dateObj) return false;
   try {
-    const d = new Date(dateString);
-    if (isNaN(d.getTime())) return false;
+    let d;
+    if (dateObj instanceof Date) {
+       d = new Date(dateObj.getTime());
+    } else {
+       let str = String(dateObj).trim();
+       if (/^\d{1,4}[/-]\d{1,2}[/-]\d{1,4}/.test(str)) {
+           const parts = str.split(/[/\sT:-]/);
+           let p0 = parseInt(parts[0], 10);
+           let p1 = parseInt(parts[1], 10);
+           let p2 = parseInt(parts[2], 10);
+
+           let year, month, day;
+           if (p0 > 1000) { year = p0; month = p1 - 1; day = p2; } 
+           else { day = p0; month = p1 - 1; year = p2; }
+
+           if (year < 100) year += 2000;
+           if (year > 2500) year -= 543; 
+
+           d = new Date(year, month, day);
+       } else {
+           d = new Date(str);
+       }
+    }
+    if (!d || isNaN(d.getTime())) return false;
+    if (d.getFullYear() > 2500) d.setFullYear(d.getFullYear() - 543);
+    
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const year = d.getFullYear();
     const recordPeriod = `${year}-${month}`;
@@ -188,9 +234,9 @@ function getStudentData(userEmail) {
   const lessons = getSheetData(LESSONS_SHEET_NAME).filter(l => l.IsActive === true);
   const sections = getSheetData(SECTIONS_SHEET_NAME);
   
-  const progress = getSheetData(PROGRESS_SHEET_NAME)
-      .filter(p => String(p.Email).trim().toLowerCase() === userEmail)
-      .map(p => p.SectionID);
+  const rawProgress = getSheetData(PROGRESS_SHEET_NAME)
+      .filter(p => String(p.Email).trim().toLowerCase() === userEmail);
+  const progress = rawProgress.map(p => p.SectionID);
   
   const timestamps = getSheetData(TIMESTAMPS_SHEET_NAME)
       .filter(t => String(t.Email).trim().toLowerCase() === userEmail);
@@ -203,7 +249,9 @@ function getStudentData(userEmail) {
   const externalProofs = getSheetData(EXTERNAL_PROOFS_SHEET_NAME)
       .filter(p => String(p.Email).trim().toLowerCase() === userEmail);
 
-  // JAVIS ADDED: ดึงข้อมูลหมวดหมู่หลักเพื่อนำคำอธิบายไปโชว์ในหน้า Student View
+  const manualLogs = getSheetData(MANUAL_SCORES_SHEET_NAME)
+      .filter(m => String(m.Email).trim().toLowerCase() === userEmail);
+
   let mainCats = [];
   try {
       const settingsData = getSheetData('Settings');
@@ -212,7 +260,7 @@ function getStudentData(userEmail) {
       }
   } catch(e) {}
 
-  let userProfile = { Email: userEmail, FullName: '', Nickname: '', Department: 'General', Position: 'พนักงานทั่วไป', ProfileImage: '', ManualBN: 0 };
+  let userProfile = { Email: userEmail, FullName: '', Nickname: '', Department: 'General', Position: 'พนักงานทั่วไป', JobTitle: '', ProfileImage: '', ManualBN: 0 };
   const profiles = getSheetData(USER_PROFILES_SHEET_NAME);
   if (profiles && profiles.length > 0) {
      const found = profiles.find(p => String(p.Email).trim().toLowerCase() === userEmail);
@@ -220,6 +268,68 @@ function getStudentData(userEmail) {
   }
 
   let totalBN = parseInt(userProfile.ManualBN) || 0;
+
+  const historyMap = {};
+  function addHistory(dateStr, points) {
+      if (!dateStr || isNaN(points) || points === 0) return;
+      let d;
+      if (dateStr instanceof Date) d = dateStr;
+      else {
+          const str = String(dateStr);
+          if (str.includes('/')) {
+               const parts = str.split(/[/\sT:-]/);
+               if (parts.length >= 3) {
+                   let p0 = parseInt(parts[0], 10);
+                   let p1 = parseInt(parts[1], 10);
+                   let p2 = parseInt(parts[2], 10);
+                   let day, month, year;
+                   if (p0 > 1000) { year = p0; month = p1 - 1; day = p2; } 
+                   else { day = p0; month = p1 - 1; year = p2; }
+                   if (year < 100) year += 2000;
+                   if (year > 2500) year -= 543;
+                   d = new Date(year, month, day);
+               }
+          } else { d = new Date(dateStr); }
+      }
+      if (!d || isNaN(d.getTime())) return;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (!historyMap[key]) historyMap[key] = { total: 0 };
+      historyMap[key].total += points;
+  }
+
+  let studentEarnedSections = {};
+  rawProgress.forEach(p => {
+      if (!studentEarnedSections[p.SectionID]) {
+          studentEarnedSections[p.SectionID] = true;
+          const sec = sections.find(s => s.SectionID === p.SectionID);
+          let t = p.Timestamp;
+          if (!t && p.EarnedBN instanceof Date) t = p.EarnedBN; 
+          let earned = (p.EarnedBN !== undefined && p.EarnedBN !== '' && !(p.EarnedBN instanceof Date)) ? parseInt(p.EarnedBN) : (sec && sec.VideoPoints !== undefined ? parseInt(sec.VideoPoints) : 10);
+          addHistory(t, earned);
+      }
+  });
+
+  let studentPassedQuizzes = {};
+  const sortedScores = [...scores].sort((a, b) => new Date(a.Timestamp) - new Date(b.Timestamp));
+  sortedScores.forEach(s => {
+      if (!studentPassedQuizzes[s.SectionID]) {
+          const percent = s.TotalQuestions > 0 ? (s.Score / s.TotalQuestions) : 0;
+          if (percent >= 0.5) {
+              studentPassedQuizzes[s.SectionID] = true;
+              const sec = sections.find(sec => sec.SectionID === s.SectionID);
+              let t = s.Timestamp;
+              if (!t && s.EarnedBN instanceof Date) t = s.EarnedBN;
+              let earned = (s.EarnedBN !== undefined && s.EarnedBN !== '' && !(s.EarnedBN instanceof Date)) ? parseInt(s.EarnedBN) : (sec && sec.QuizPoints !== undefined ? parseInt(sec.QuizPoints) : 50);
+              addHistory(t, earned);
+          }
+      }
+  });
+
+  manualLogs.forEach(m => { addHistory(m.Timestamp, parseInt(m.Points) || 0); });
+
+  const monthlyHistory = Object.keys(historyMap).map(k => {
+      return { month: k, score: historyMap[k].total };
+  }).sort((a, b) => b.month.localeCompare(a.month)); 
 
   lessons.forEach(lesson => {
     lesson.sections = sections
@@ -232,9 +342,7 @@ function getStudentData(userEmail) {
         const latestScore = scores.filter(s => s.SectionID === section.SectionID)
                                   .sort((a, b) => new Date(b.Timestamp) - new Date(a.Timestamp))[0];
         section.quizScore = latestScore || null;
-        
         section.ContentType = section.ContentType || 'youtube';
-
         const proof = externalProofs.filter(p => p.SectionID === section.SectionID)
                                     .sort((a,b) => new Date(b.Timestamp) - new Date(a.Timestamp))[0];
         section.externalProof = proof || null;
@@ -247,7 +355,6 @@ function getStudentData(userEmail) {
             let qp = parseInt(section.QuizPoints);
             totalBN += isNaN(qp) ? 50 : qp;
         }
-
         return section;
       });
     
@@ -255,6 +362,10 @@ function getStudentData(userEmail) {
         const isVideoDone = progress.includes(s.SectionID);
         const isQuizDone = !s.hasQuiz || (s.quizScore && (s.quizScore.Score / s.quizScore.TotalQuestions) >= 0.5);
         return isVideoDone && isQuizDone;
+    });
+
+    lesson.isStarted = lesson.sections.some(s => {
+        return progress.includes(s.SectionID) || s.latestTimestamp > 0 || s.quizScore || s.externalProof;
     });
   });
 
@@ -281,22 +392,32 @@ function getStudentData(userEmail) {
 
   const personalizedLessons = accessibleLessons.filter(lesson => {
       if (lesson.TargetEmails && lesson.TargetEmails.trim() !== '') return true;
+      
+      let isPersonalized = false;
       if (lesson.TargetDepartments) {
           const targetDepts = lesson.TargetDepartments.split(',').map(d => d.trim());
-          return targetDepts.includes(userDept) && !targetDepts.includes('ทั้งหมด (All)');
+          if (targetDepts.includes(userDept) && !targetDepts.includes('ทั้งหมด (All)')) {
+              isPersonalized = true;
+          }
       }
-      return false;
+      if (lesson.TargetPositions) {
+          const targetPos = lesson.TargetPositions.split(',').map(p => p.trim());
+          if (targetPos.includes(userPos) && !targetPos.includes('ทั้งหมด (All)')) {
+              isPersonalized = true;
+          }
+      }
+      return isPersonalized;
   });
 
   const personalizedIds = personalizedLessons.map(l => l.LessonID);
   const featuredLessons = accessibleLessons.filter(lesson => !personalizedIds.includes(lesson.LessonID));
 
   return {
-    userInfo: { email: userEmail, progress: progress, profile: userProfile, totalBN: totalBN },
+    userInfo: { email: userEmail, progress: progress, profile: userProfile, totalBN: totalBN, monthlyHistory: monthlyHistory },
     lessons: lessons,
     featuredLessons: featuredLessons,
     personalizedLessons: personalizedLessons,
-    mainCategories: mainCats // JAVIS ADDED: ส่งข้อมูลหมวดหมู่หลักไปด้วย
+    mainCategories: mainCats
   };
 }
 
@@ -315,8 +436,18 @@ function getPublicLeaderboard(period) {
   const profiles = getSheetData(USER_PROFILES_SHEET_NAME);
   const allManualLogs = getSheetData(MANUAL_SCORES_SHEET_NAME);
 
-  const usersProgress = allUsersProgress.filter(p => isDateInPeriod(p.Timestamp, targetPeriod));
-  const scores = allScores.filter(s => isDateInPeriod(s.Timestamp, targetPeriod));
+  const usersProgress = allUsersProgress.filter(p => {
+      let t = p.Timestamp;
+      if (!t && p.EarnedBN instanceof Date) t = p.EarnedBN;
+      return isDateInPeriod(t, targetPeriod);
+  });
+  
+  const scores = allScores.filter(s => {
+      let t = s.Timestamp;
+      if (!t && s.EarnedBN instanceof Date) t = s.EarnedBN;
+      return isDateInPeriod(t, targetPeriod);
+  });
+  
   const manualLogs = allManualLogs.filter(m => isDateInPeriod(m.Timestamp, targetPeriod));
 
   const sectionMap = {};
@@ -332,7 +463,6 @@ function getPublicLeaderboard(period) {
   profiles.forEach(p => {
       const email = String(p.Email).trim().toLowerCase();
       let defaultImg = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(p.Nickname || p.FullName || email) + '&background=31c1d7&color=fff';
-      
       const baseManualBN = period === 'all' ? (parseInt(p.ManualBN) || 0) : 0;
 
       studentMap[email] = {
@@ -362,7 +492,7 @@ function getPublicLeaderboard(period) {
       }
       if (sectionMap[p.SectionID] && !studentMap[email].completedSections.includes(p.SectionID)) {
           studentMap[email].completedSections.push(p.SectionID);
-          let earned = (p.EarnedBN !== undefined && p.EarnedBN !== '') ? parseInt(p.EarnedBN) : (sectionMap[p.SectionID] ? sectionMap[p.SectionID].vp : 0);
+          let earned = (p.EarnedBN !== undefined && p.EarnedBN !== '' && !(p.EarnedBN instanceof Date)) ? parseInt(p.EarnedBN) : (sectionMap[p.SectionID] ? sectionMap[p.SectionID].vp : 0);
           studentMap[email].totalBN += earned; 
       }
   });
@@ -377,7 +507,7 @@ function getPublicLeaderboard(period) {
           if (percent >= 0.5) { 
              if (!studentMap[email].scores[s.SectionID]) { 
                  studentMap[email].scores[s.SectionID] = percent;
-                 let earned = (s.EarnedBN !== undefined && s.EarnedBN !== '') ? parseInt(s.EarnedBN) : (sectionMap[s.SectionID] ? sectionMap[s.SectionID].qp : 0);
+                 let earned = (s.EarnedBN !== undefined && s.EarnedBN !== '' && !(s.EarnedBN instanceof Date)) ? parseInt(s.EarnedBN) : (sectionMap[s.SectionID] ? sectionMap[s.SectionID].qp : 0);
                  studentMap[email].totalBN += earned; 
              }
           }
@@ -395,13 +525,20 @@ function saveQuizScore(scoreData) {
     try {
         const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(QUIZ_SCORES_SHEET_NAME);
         const data = sheet.getDataRange().getValues();
-        const headers = data[0] || [];
+        let headers = data[0] || [];
         
-        let earnedCol = headers.indexOf('EarnedBN');
-        if (earnedCol === -1 && headers.length > 0) {
-            earnedCol = headers.length;
-            sheet.getRange(1, earnedCol + 1).setValue('EarnedBN');
-            headers.push('EarnedBN');
+        if (headers.length === 0) {
+            headers = ['Email', 'SectionID', 'Score', 'TotalQuestions', 'Timestamp', 'EarnedBN'];
+            sheet.appendRow(headers);
+        } else {
+            if (headers.indexOf('Timestamp') === -1) {
+                headers.push('Timestamp');
+                sheet.getRange(1, headers.length).setValue('Timestamp');
+            }
+            if (headers.indexOf('EarnedBN') === -1) {
+                headers.push('EarnedBN');
+                sheet.getRange(1, headers.length).setValue('EarnedBN');
+            }
         }
 
         const passed = (scoreData.score / scoreData.totalQuestions) >= 0.5;
@@ -413,14 +550,22 @@ function saveQuizScore(scoreData) {
             earnedPoints = sec && sec.QuizPoints ? parseInt(sec.QuizPoints) : 50;
         }
 
-        sheet.appendRow([
-            userEmail,
-            scoreData.sectionId,
-            scoreData.score,
-            scoreData.totalQuestions,
-            new Date(),
-            earnedPoints
-        ]);
+        const newRow = new Array(headers.length).fill('');
+        newRow[headers.indexOf('Email')] = userEmail;
+        newRow[headers.indexOf('SectionID')] = scoreData.sectionId;
+        
+        let scoreIdx = headers.indexOf('Score');
+        if(scoreIdx > -1) newRow[scoreIdx] = scoreData.score;
+        else newRow[2] = scoreData.score; 
+        
+        let tqIdx = headers.indexOf('TotalQuestions');
+        if(tqIdx > -1) newRow[tqIdx] = scoreData.totalQuestions;
+        else newRow[3] = scoreData.totalQuestions;
+
+        newRow[headers.indexOf('Timestamp')] = new Date();
+        newRow[headers.indexOf('EarnedBN')] = earnedPoints;
+
+        sheet.appendRow(newRow);
         
         if (passed) {
             recordProgress(scoreData.sectionId);
@@ -454,13 +599,20 @@ function recordProgress(sectionId) {
   
   const progressSheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(PROGRESS_SHEET_NAME);
   const data = progressSheet.getDataRange().getValues();
-  const headers = data[0] || [];
+  let headers = data[0] || [];
   
-  let earnedCol = headers.indexOf('EarnedBN');
-  if (earnedCol === -1 && headers.length > 0) {
-    earnedCol = headers.length;
-    progressSheet.getRange(1, earnedCol + 1).setValue('EarnedBN');
-    headers.push('EarnedBN');
+  if (headers.length === 0) {
+      headers = ['Email', 'SectionID', 'Timestamp', 'EarnedBN'];
+      progressSheet.appendRow(headers);
+  } else {
+      if (headers.indexOf('Timestamp') === -1) {
+          headers.push('Timestamp');
+          progressSheet.getRange(1, headers.length).setValue('Timestamp');
+      }
+      if (headers.indexOf('EarnedBN') === -1) {
+          headers.push('EarnedBN');
+          progressSheet.getRange(1, headers.length).setValue('EarnedBN');
+      }
   }
 
   const alreadyExists = data.some(row => String(row[0]).trim().toLowerCase() === safeEmail && row[1] === sectionId);
@@ -468,9 +620,15 @@ function recordProgress(sectionId) {
   if (!alreadyExists) {
     const sections = getSheetData(SECTIONS_SHEET_NAME);
     const sec = sections.find(s => s.SectionID === sectionId);
-    const videoPoints = sec && sec.VideoPoints ? parseInt(sec.VideoPoints) : 10;
+    const videoPoints = sec && sec.VideoPoints !== undefined ? parseInt(sec.VideoPoints) : 10;
 
-    progressSheet.appendRow([userEmail, sectionId, new Date(), videoPoints]);
+    const newRow = new Array(headers.length).fill('');
+    newRow[headers.indexOf('Email')] = userEmail;
+    newRow[headers.indexOf('SectionID')] = sectionId;
+    newRow[headers.indexOf('Timestamp')] = new Date();
+    newRow[headers.indexOf('EarnedBN')] = videoPoints;
+
+    progressSheet.appendRow(newRow);
     return { status: 'success' };
   }
   return { status: 'info', message: 'Already recorded.' };
@@ -479,13 +637,20 @@ function recordProgress(sectionId) {
 function recordProgressAdmin(email, sectionId) {
   const progressSheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(PROGRESS_SHEET_NAME);
   const data = progressSheet.getDataRange().getValues();
-  const headers = data[0] || [];
+  let headers = data[0] || [];
   
-  let earnedCol = headers.indexOf('EarnedBN');
-  if (earnedCol === -1 && headers.length > 0) {
-    earnedCol = headers.length;
-    progressSheet.getRange(1, earnedCol + 1).setValue('EarnedBN');
-    headers.push('EarnedBN');
+  if (headers.length === 0) {
+      headers = ['Email', 'SectionID', 'Timestamp', 'EarnedBN'];
+      progressSheet.appendRow(headers);
+  } else {
+      if (headers.indexOf('Timestamp') === -1) {
+          headers.push('Timestamp');
+          progressSheet.getRange(1, headers.length).setValue('Timestamp');
+      }
+      if (headers.indexOf('EarnedBN') === -1) {
+          headers.push('EarnedBN');
+          progressSheet.getRange(1, headers.length).setValue('EarnedBN');
+      }
   }
 
   const alreadyExists = data.some(row => String(row[0]).trim().toLowerCase() === email.trim().toLowerCase() && row[1] === sectionId);
@@ -493,9 +658,15 @@ function recordProgressAdmin(email, sectionId) {
   if (!alreadyExists) {
     const sections = getSheetData(SECTIONS_SHEET_NAME);
     const sec = sections.find(s => s.SectionID === sectionId);
-    const videoPoints = sec && sec.VideoPoints ? parseInt(sec.VideoPoints) : 10;
+    const videoPoints = sec && sec.VideoPoints !== undefined ? parseInt(sec.VideoPoints) : 10;
 
-    progressSheet.appendRow([email, sectionId, new Date(), videoPoints]);
+    const newRow = new Array(headers.length).fill('');
+    newRow[headers.indexOf('Email')] = email.trim().toLowerCase();
+    newRow[headers.indexOf('SectionID')] = sectionId;
+    newRow[headers.indexOf('Timestamp')] = new Date();
+    newRow[headers.indexOf('EarnedBN')] = videoPoints;
+
+    progressSheet.appendRow(newRow);
     return { status: 'success' };
   }
   return { status: 'info', message: 'Already recorded.' };
@@ -606,6 +777,14 @@ function updateUserProfile(data) {
     if (manualCol === -1) {
         manualCol = headers.length;
         sheet.getRange(1, manualCol + 1).setValue('ManualBN');
+        headers.push('ManualBN');
+    }
+
+    let jobCol = headers.indexOf('JobTitle');
+    if (jobCol === -1) {
+       jobCol = headers.length;
+       sheet.getRange(1, jobCol + 1).setValue('JobTitle');
+       headers.push('JobTitle');
     }
     
     let profileImageUrl = null;
@@ -628,9 +807,10 @@ function updateUserProfile(data) {
     }
 
     if (rowIndex > -1) {
-      sheet.getRange(rowIndex, nameCol + 1).setValue(data.fullName);
-      sheet.getRange(rowIndex, nickCol + 1).setValue(data.nickname);
-      if (profileImageUrl) {
+      if (nameCol > -1) sheet.getRange(rowIndex, nameCol + 1).setValue(data.fullName);
+      if (nickCol > -1) sheet.getRange(rowIndex, nickCol + 1).setValue(data.nickname);
+      if (jobCol > -1 && data.jobTitle !== undefined) sheet.getRange(rowIndex, jobCol + 1).setValue(data.jobTitle);
+      if (profileImageUrl && imgCol > -1) {
         sheet.getRange(rowIndex, imgCol + 1).setValue(profileImageUrl);
       }
     } else {
@@ -641,6 +821,7 @@ function updateUserProfile(data) {
       newRow[deptCol] = 'General';
       newRow[posCol] = 'พนักงาน';
       newRow[manualCol] = 0;
+      newRow[jobCol] = data.jobTitle || '';
       if (profileImageUrl) newRow[imgCol] = profileImageUrl;
       sheet.appendRow(newRow);
     }
@@ -672,7 +853,6 @@ function getAdminData() {
     try {
         const settingsData = getSheetData('Settings');
         if (settingsData && settingsData.length > 0) {
-            // FIX: ดึงค่าหมวดหมู่หลักออกมาด้วย
             settings.mainCategories = settingsData.map(r => r.MainCategories).filter(Boolean);
             settings.categories = settingsData.map(r => r.Categories).filter(Boolean);
             settings.departments = settingsData.map(r => r.Departments).filter(Boolean);
@@ -706,12 +886,25 @@ function saveLesson(data) {
     const sheetData = sheet.getDataRange().getValues();
     const headers = sheetData[0];
     
-    // ตรวจสอบว่ามีคอลัมน์ MainCategory หรือยัง ถ้ายังให้สร้างอัตโนมัติ
     let mainCatCol = headers.indexOf('MainCategory');
     if (mainCatCol === -1) {
       mainCatCol = headers.length;
       sheet.getRange(1, mainCatCol + 1).setValue('MainCategory');
       headers.push('MainCategory');
+    }
+    
+    let featCol = headers.indexOf('IsFeatured');
+    if (featCol === -1) {
+      featCol = headers.length;
+      sheet.getRange(1, featCol + 1).setValue('IsFeatured');
+      headers.push('IsFeatured');
+    }
+
+    let catFeatCol = headers.indexOf('IsCategoryFeatured');
+    if (catFeatCol === -1) {
+      catFeatCol = headers.length;
+      sheet.getRange(1, catFeatCol + 1).setValue('IsCategoryFeatured');
+      headers.push('IsCategoryFeatured');
     }
 
     const idCol = headers.indexOf('LessonID');
@@ -740,8 +933,10 @@ function saveLesson(data) {
         sheet.getRange(rowIndex, titleCol + 1).setValue(data.Title);
         if (descCol > -1) sheet.getRange(rowIndex, descCol + 1).setValue(data.Description);
         if (activeCol > -1) sheet.getRange(rowIndex, activeCol + 1).setValue(data.IsActive);
+        if (featCol > -1) sheet.getRange(rowIndex, featCol + 1).setValue(data.IsFeatured); 
+        if (catFeatCol > -1) sheet.getRange(rowIndex, catFeatCol + 1).setValue(data.IsCategoryFeatured); 
         if (categoryCol > -1) sheet.getRange(rowIndex, categoryCol + 1).setValue(data.Category);
-        if (mainCatCol > -1) sheet.getRange(rowIndex, mainCatCol + 1).setValue(data.MainCategory); // บันทึกหมวดหลัก
+        if (mainCatCol > -1) sheet.getRange(rowIndex, mainCatCol + 1).setValue(data.MainCategory); 
         if (targetDeptCol > -1) sheet.getRange(rowIndex, targetDeptCol + 1).setValue(data.TargetDepartments);
         if (targetPosCol > -1) sheet.getRange(rowIndex, targetPosCol + 1).setValue(data.TargetPositions);
         if (targetEmailCol > -1) sheet.getRange(rowIndex, targetEmailCol + 1).setValue(data.TargetEmails);
@@ -758,8 +953,10 @@ function saveLesson(data) {
       newRow[titleCol] = data.Title;
       if (descCol > -1) newRow[descCol] = data.Description;
       if (activeCol > -1) newRow[activeCol] = data.IsActive;
+      if (featCol > -1) newRow[featCol] = data.IsFeatured; 
+      if (catFeatCol > -1) newRow[catFeatCol] = data.IsCategoryFeatured;
       if (categoryCol > -1) newRow[categoryCol] = data.Category;
-      if (mainCatCol > -1) newRow[mainCatCol] = data.MainCategory; // บันทึกหมวดหลัก
+      if (mainCatCol > -1) newRow[mainCatCol] = data.MainCategory; 
       if (targetDeptCol > -1) newRow[targetDeptCol] = data.TargetDepartments;
       if (targetPosCol > -1) newRow[targetPosCol] = data.TargetPositions;
       if (targetEmailCol > -1) newRow[targetEmailCol] = data.TargetEmails;
@@ -825,6 +1022,13 @@ function saveSection(data) {
       headers.push('ContentType');
     }
 
+    let durCol = headers.indexOf('Duration');
+    if (durCol === -1) {
+      durCol = headers.length;
+      sheet.getRange(1, durCol + 1).setValue('Duration');
+      headers.push('Duration');
+    }
+
     const idCol = headers.indexOf('SectionID');
     const lessonIdCol = headers.indexOf('LessonID');
     const titleCol = headers.indexOf('Title');
@@ -846,6 +1050,7 @@ function saveSection(data) {
         sheet.getRange(rowIndex, vpCol + 1).setValue(data.VideoPoints !== undefined ? data.VideoPoints : 10);
         sheet.getRange(rowIndex, qpCol + 1).setValue(data.QuizPoints !== undefined ? data.QuizPoints : 50);
         sheet.getRange(rowIndex, typeCol + 1).setValue(data.ContentType || 'youtube');
+        sheet.getRange(rowIndex, durCol + 1).setValue(data.Duration !== undefined ? data.Duration : 15);
       } else { 
         return { status: 'error', message: 'Section not found' }; 
       }
@@ -862,6 +1067,7 @@ function saveSection(data) {
       newRow[vpCol] = data.VideoPoints !== undefined ? data.VideoPoints : 10;
       newRow[qpCol] = data.QuizPoints !== undefined ? data.QuizPoints : 50;
       newRow[typeCol] = data.ContentType || 'youtube';
+      newRow[durCol] = data.Duration !== undefined ? data.Duration : 15;
       
       sheet.appendRow(newRow);
       return { status: 'success', newId: newId };
@@ -948,6 +1154,13 @@ function saveUserAdmin(userData) {
        headers.push('ManualBN');
     }
 
+    let jobCol = headers.indexOf('JobTitle');
+    if (jobCol === -1) {
+       jobCol = headers.length;
+       sheet.getRange(1, jobCol + 1).setValue('JobTitle');
+       headers.push('JobTitle');
+    }
+
     const emailCol = headers.indexOf('Email');
     const nameCol = headers.indexOf('FullName');
     const nickCol = headers.indexOf('Nickname');
@@ -961,7 +1174,10 @@ function saveUserAdmin(userData) {
         if (deptCol > -1) sheet.getRange(i + 1, deptCol + 1).setValue(userData.Department);
         if (posCol > -1) sheet.getRange(i + 1, posCol + 1).setValue(userData.Position);
         
-        sheet.getRange(i + 1, manualCol + 1).setValue(userData.ManualBN || 0);
+        if (jobCol > -1 && userData.JobTitle !== undefined) {
+            sheet.getRange(i + 1, jobCol + 1).setValue(userData.JobTitle);
+        }
+        
         return { status: 'success' };
       }
     }
@@ -1014,7 +1230,6 @@ function adminAddManualScore(data) {
   }
 }
 
-// JAVIS ADDED: ฟังก์ชันดึงประวัติการให้คะแนนพิเศษ (Log) ของพนักงาน
 function getUserManualScoreLogs(email) {
   try {
     const permissions = getCurrentUserPermissions(Session.getActiveUser().getEmail());
@@ -1023,7 +1238,6 @@ function getUserManualScoreLogs(email) {
     const logs = getSheetData(MANUAL_SCORES_SHEET_NAME);
     const userLogs = logs.filter(log => String(log.Email).trim().toLowerCase() === String(email).trim().toLowerCase());
 
-    // เรียงจากล่าสุดไปเก่าสุด
     userLogs.sort((a, b) => new Date(b.Timestamp) - new Date(a.Timestamp));
 
     const formattedLogs = userLogs.map(log => {
@@ -1094,8 +1308,18 @@ function getDashboardStats(period) {
   const allExternalProofs = getSheetData(EXTERNAL_PROOFS_SHEET_NAME);
   const allManualLogs = getSheetData(MANUAL_SCORES_SHEET_NAME); 
 
-  const usersProgress = allUsersProgress.filter(p => isDateInPeriod(p.Timestamp, period));
-  const scores = allScores.filter(s => isDateInPeriod(s.Timestamp, period));
+  const usersProgress = allUsersProgress.filter(p => {
+      let t = p.Timestamp;
+      if (!t && p.EarnedBN instanceof Date) t = p.EarnedBN;
+      return isDateInPeriod(t, period);
+  });
+  
+  const scores = allScores.filter(s => {
+      let t = s.Timestamp;
+      if (!t && s.EarnedBN instanceof Date) t = s.EarnedBN;
+      return isDateInPeriod(t, period);
+  });
+  
   const externalProofs = allExternalProofs.filter(p => isDateInPeriod(p.Timestamp, period));
   const manualLogs = allManualLogs.filter(m => isDateInPeriod(m.Timestamp, period)); 
 
@@ -1123,6 +1347,7 @@ function getDashboardStats(period) {
           nickname: p.Nickname || '-',
           department: p.Department || 'General',
           position: p.Position || '-',
+          jobTitle: p.JobTitle || '', 
           profileImage: p.ProfileImage || '',
           completedSections: [],
           scores: {},
@@ -1147,32 +1372,38 @@ function getDashboardStats(period) {
   usersProgress.forEach(p => {
       const email = String(p.Email).trim().toLowerCase();
       if(!studentMap[email]) {
-          studentMap[email] = { email: email, fullName: email, nickname: '-', department: '-', position: '-', profileImage: '', completedSections: [], scores: {}, manualBN: 0, totalBN: 0, lastActive: null, externalProofs: externalProofs.filter(proof => String(proof.Email).trim().toLowerCase() === email) };
+          studentMap[email] = { email: email, fullName: email, nickname: '-', department: '-', position: '-', jobTitle: '', profileImage: '', completedSections: [], scores: {}, manualBN: 0, totalBN: 0, lastActive: null, externalProofs: externalProofs.filter(proof => String(proof.Email).trim().toLowerCase() === email) };
       }
       
+      let t = p.Timestamp;
+      if (!t && p.EarnedBN instanceof Date) t = p.EarnedBN;
+
       if (sectionMap[p.SectionID] && !studentMap[email].completedSections.includes(p.SectionID)) {
           studentMap[email].completedSections.push(p.SectionID);
-          let earned = (p.EarnedBN !== undefined && p.EarnedBN !== '') ? parseInt(p.EarnedBN) : (sectionMap[p.SectionID] ? sectionMap[p.SectionID].vp : 0);
+          let earned = (p.EarnedBN !== undefined && p.EarnedBN !== '' && !(p.EarnedBN instanceof Date)) ? parseInt(p.EarnedBN) : (sectionMap[p.SectionID] ? sectionMap[p.SectionID].vp : 0);
           studentMap[email].totalBN += earned; 
       }
-      if (!studentMap[email].lastActive || new Date(p.Timestamp) > new Date(studentMap[email].lastActive)) {
-          studentMap[email].lastActive = p.Timestamp;
+      if (!studentMap[email].lastActive || new Date(t) > new Date(studentMap[email].lastActive)) {
+          studentMap[email].lastActive = t;
       }
   });
 
   scores.forEach(s => {
       const email = String(s.Email).trim().toLowerCase();
       if(!studentMap[email]) {
-          studentMap[email] = { email: email, fullName: email, nickname: '-', department: '-', position: '-', profileImage: '', completedSections: [], scores: {}, manualBN: 0, totalBN: 0, lastActive: null, externalProofs: externalProofs.filter(proof => String(proof.Email).trim().toLowerCase() === email) };
+          studentMap[email] = { email: email, fullName: email, nickname: '-', department: '-', position: '-', jobTitle: '', profileImage: '', completedSections: [], scores: {}, manualBN: 0, totalBN: 0, lastActive: null, externalProofs: externalProofs.filter(proof => String(proof.Email).trim().toLowerCase() === email) };
       }
       
+      let t = s.Timestamp;
+      if (!t && s.EarnedBN instanceof Date) t = s.EarnedBN;
+
       if (sectionMap[s.SectionID]) {
           const percent = s.TotalQuestions > 0 ? (s.Score / s.TotalQuestions) : 0;
           
           if (percent >= 0.5) {
              if (!studentMap[email].scores[s.SectionID]) {
                  studentMap[email].scores[s.SectionID] = percent;
-                 let earned = (s.EarnedBN !== undefined && s.EarnedBN !== '') ? parseInt(s.EarnedBN) : (sectionMap[s.SectionID] ? sectionMap[s.SectionID].qp : 0);
+                 let earned = (s.EarnedBN !== undefined && s.EarnedBN !== '' && !(s.EarnedBN instanceof Date)) ? parseInt(s.EarnedBN) : (sectionMap[s.SectionID] ? sectionMap[s.SectionID].qp : 0);
                  studentMap[email].totalBN += earned; 
              }
           } else {
@@ -1182,8 +1413,8 @@ function getDashboardStats(period) {
           }
       }
 
-      if (!studentMap[email].lastActive || new Date(s.Timestamp) > new Date(studentMap[email].lastActive)) {
-          studentMap[email].lastActive = s.Timestamp;
+      if (!studentMap[email].lastActive || new Date(t) > new Date(studentMap[email].lastActive)) {
+          studentMap[email].lastActive = t;
       }
   });
 
@@ -1226,11 +1457,9 @@ function saveMasterData(masterData) {
     const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName('Settings');
     if (!sheet) return { status: 'error', message: 'หาชีต Settings ไม่พบ' };
 
-    // FIX: สร้างและจัดการ 4 คอลัมน์ (รวม MainCategories) อย่างถูกต้อง
     const headers = ["MainCategories", "Categories", "Departments", "Positions"];
     const lastRow = sheet.getLastRow();
     
-    // เซ็ตหัวตารางเสมอเพื่อป้องกันการสูญหาย
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
 
     if (lastRow > 1) {
@@ -1259,6 +1488,45 @@ function saveMasterData(masterData) {
     }
 
     return { status: 'success' };
+  } catch(e) {
+    return { status: 'error', message: e.toString() };
+  }
+}
+
+function deleteUserAdmin(email) {
+  try {
+    const adminEmail = Session.getActiveUser().getEmail();
+    const permissions = getCurrentUserPermissions(adminEmail);
+    if (!permissions.isSuperAdmin && !permissions.canEditLessons) return { status: 'error', message: 'Permission Denied' };
+
+    const targetEmail = String(email).trim().toLowerCase();
+    
+    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(USER_PROFILES_SHEET_NAME);
+    const data = sheet.getDataRange().getValues();
+    const emailCol = data[0].indexOf('Email');
+    let deleted = false;
+    for (let i = data.length - 1; i > 0; i--) {
+      if (String(data[i][emailCol]).trim().toLowerCase() === targetEmail) {
+        sheet.deleteRow(i + 1);
+        deleted = true;
+        break;
+      }
+    }
+
+    const progSheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(PROGRESS_SHEET_NAME);
+    const progData = progSheet.getDataRange().getValues();
+    for (let i = progData.length - 1; i > 0; i--) {
+      if (String(progData[i][0]).trim().toLowerCase() === targetEmail) progSheet.deleteRow(i + 1);
+    }
+
+    const quizSheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(QUIZ_SCORES_SHEET_NAME);
+    const quizData = quizSheet.getDataRange().getValues();
+    for (let i = quizData.length - 1; i > 0; i--) {
+      if (String(quizData[i][0]).trim().toLowerCase() === targetEmail) quizSheet.deleteRow(i + 1);
+    }
+
+    if(deleted) return { status: 'success' };
+    return { status: 'error', message: 'ไม่พบอีเมลนี้ในระบบ' };
   } catch(e) {
     return { status: 'error', message: e.toString() };
   }
