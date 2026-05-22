@@ -44,14 +44,18 @@
               </div>
             </div>
             <div class="text-center sm:text-left mt-0 sm:mt-24">
-              <div class="inline-flex items-center px-4 py-1.5 rounded-xl bg-[#31c1d7]/10 text-[#31c1d7] text-xs font-black mb-3 border border-[#31c1d7]/20 uppercase tracking-widest">
-                <?= (typeof userProfile !== 'undefined' && userProfile && userProfile.Department) ? userProfile.Department : 'General' ?>
+              <div class="flex flex-wrap justify-center sm:justify-start gap-2 mb-3">
+                  <div class="inline-flex items-center px-4 py-1.5 rounded-xl bg-[#31c1d7]/10 text-[#31c1d7] text-xs font-black border border-[#31c1d7]/20 uppercase tracking-widest">
+                    <?= (typeof userProfile !== 'undefined' && userProfile && userProfile.Department && userProfile.Department !== 'General') ? userProfile.Department : 'ส่วนกลาง' ?>
+                  </div>
+                  <div class="inline-flex items-center px-4 py-1.5 rounded-xl bg-slate-100 text-slate-600 text-xs font-black border border-slate-200 uppercase tracking-widest">
+                    ระดับ: <?= (typeof userProfile !== 'undefined' && userProfile && userProfile.Position) ? userProfile.Position : 'พนักงานทั่วไป' ?>
+                  </div>
               </div>
-              <h2 class="text-3xl font-black text-slate-800"><?= (typeof userProfile !== 'undefined' && userProfile && userProfile.Position) ? userProfile.Position : 'พนักงาน' ?></h2>
+              <h2 class="text-3xl font-black text-slate-800"><?= (typeof userProfile !== 'undefined' && userProfile && userProfile.JobTitle) ? userProfile.JobTitle : 'ยังไม่ระบุตำแหน่งงาน' ?></h2>
               <p class="text-slate-400 text-sm font-medium mt-1 font-mono"><?= userEmail ?></p>
             </div>
           </div>
-
           <!-- กล่องแสดง Rank และความคืบหน้า (Profile_JS.html จะดึงข้อมูลมาเติมตรงนี้) -->
           <div id="profile-rank-card" class="mb-10 bg-white border border-slate-100 rounded-[2rem] p-6 sm:p-8 shadow-sm w-full animate-fade-slide-up hidden">
               <!-- โค้ดส่วนนี้จะถูกแทรกโดย Profile_JS.html -->
