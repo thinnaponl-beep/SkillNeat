@@ -199,12 +199,13 @@
   window.initialCalcDone = false;
 
   // --- ลอจิกการคำนวณ 5 ระดับ (Rank) ---
+  // --- ลอจิกการคำนวณ 5 ระดับ (Rank) ---
   function getUserRank(bn) {
-      if (bn >= 1000) return { name: 'Master', th: 'ปรมาจารย์', icon: '👑', color: 'text-amber-500', bg: 'bg-amber-50', border: 'border-amber-200', next: null, min: 1000 };
-      if (bn >= 600) return { name: 'Expert', th: 'ผู้เชี่ยวชาญ', icon: '💎', color: 'text-indigo-500', bg: 'bg-indigo-50', border: 'border-indigo-200', next: 1000, min: 600 };
-      if (bn >= 300) return { name: 'Scholar', th: 'ผู้ใฝ่รู้', icon: '🥇', color: 'text-[#31c1d7]', bg: 'bg-[#31c1d7]/10', border: 'border-[#31c1d7]/30', next: 600, min: 300 };
-      if (bn >= 100) return { name: 'Explorer', th: 'นักสำรวจ', icon: '🥈', color: 'text-sky-500', bg: 'bg-sky-50', border: 'border-sky-200', next: 300, min: 100 };
-      return { name: 'Novice', th: 'ผู้เริ่มต้น', icon: '🥉', color: 'text-slate-500', bg: 'bg-slate-50', border: 'border-slate-200', next: 100, min: 0 };
+      if (bn >= 10000) return { name: 'SkillNeat Diamond Learners', th: 'ปรมาจารย์', icon: '👑', color: 'text-amber-500', bg: 'bg-amber-50', border: 'border-amber-200', next: null, min: 10000 };
+      if (bn >= 5000) return { name: 'SkillNeat Platinum Learners', th: 'ผู้เชี่ยวชาญ', icon: '💎', color: 'text-indigo-500', bg: 'bg-indigo-50', border: 'border-indigo-200', next: 10000, min: 5000 };
+      if (bn >= 2500) return { name: 'SkillNeat Gold Learners', th: 'ผู้ใฝ่รู้', icon: '🥇', color: 'text-[#31c1d7]', bg: 'bg-[#31c1d7]/10', border: 'border-[#31c1d7]/30', next: 5000, min: 2500 };
+      if (bn >= 1000) return { name: 'SkillNeat Silver Learners', th: 'นักสำรวจ', icon: '🥈', color: 'text-sky-500', bg: 'bg-sky-50', border: 'border-sky-200', next: 2500, min: 1000 };
+      return { name: 'SkillNeat Bronze Learners', th: 'ผู้เริ่มต้น', icon: '🥉', color: 'text-slate-500', bg: 'bg-slate-50', border: 'border-slate-200', next: 1000, min: 0 };
   }
 
   // ระบบอัปเดตคะแนนแบบ Real-time ดึงค่าจากชีทโดยตรง!
