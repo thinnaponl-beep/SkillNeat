@@ -1,0 +1,186 @@
+<script>
+/* ==========================================
+   1. ตัวแปรและสถานะเริ่มต้น (Global State)
+========================================== */
+const serverDataElement = document.getElementById('server-data');
+const studentData = JSON.parse(serverDataElement.textContent || '{}');
+
+if (!studentData.userInfo) studentData.userInfo = {};
+let rawProgress = studentData.userInfo.progress || studentData.progress || [];
+if (typeof rawProgress === 'string') {
+    try { rawProgress = JSON.parse(rawProgress); } 
+    catch(e) { rawProgress = rawProgress.split(',').map(function(s) { return s.trim(); }).filter(function(s) { return s; }); }
+}
+if (!Array.isArray(rawProgress)) rawProgress = [];
+studentData.userInfo.progress = rawProgress;
+
+const userInfo = studentData.userInfo;
+const lessons = (studentData.featuredLessons || []).concat(studentData.personalizedLessons || []);
+
+function getMainCategoryDesc(catName) {
+    if (!studentData.mainCategories || !Array.isArray(studentData.mainCategories)) return '';
+    const found = studentData.mainCategories.find(function(c) { return c.split('|')[0] === catName; });
+    return found && found.includes('|') ? found.split('|')[1] : '';
+}
+
+const views = {
+    loading: document.getElementById('loading'),
+    lessonList: document.getElementById('lesson-list'),
+    myCoursesView: document.getElementById('my-courses-view'),
+    videoPlayer: document.getElementById('video-player'),
+    quiz: document.getElementById('quiz')
+};
+
+let currentLesson = null;
+let currentSectionIndex = 0;
+let player = null;
+let latestTimestampWatched = 0;
+let quizQuestions = [];
+let quizAnswers = [];
+let progressSaveTimeout = null;
+let maxTimeWatched = 0;
+let videoTrackerInterval = null;
+let isMiniPlayer = false;
+
+let originalVideoParent = null;
+let originalVideoSibling = null;
+
+let cachedLeaderboardData = { 'current_month': null, 'all': null };
+let currentLeaderboardPeriod = 'current_month';
+let isFetchingLeaderboard = false;
+let isLessonListInitialized = false;
+
+let currentExternalProofBase64 = null;
+let currentExternalProofMimeType = null;
+
+/* ==========================================
+   2. การนำทางและควบคุมหน้า (Routing & Views)
+========================================== */
+function showView(viewId) {
+    Object.values(views).forEach(function(v) {
+        if (v === views.videoPlayer && isMiniPlayer) return;
+        v.classList.add('hidden');
+    });
+    
+    if (viewId === 'lessonList') {
+        views.lessonList.classList.remove('hidden');
+        if(typeof renderLessonList === 'function') renderLessonList();
+    } else if (viewId === 'myCoursesView') {
+        views.myCoursesView.classList.remove('hidden');
+        if(typeof renderMyCourses === 'function') renderMyCourses();
+    } else if (views[viewId]) {
+        views[viewId].classList.remove('hidden');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const tag = document.createElement('script');
+    tag.src = "https://www.youtube.com/iframe_api";
+    const firstScriptTag = document.getElementsByTagName('script')[0];
+    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+    let urlParams = new URLSearchParams('');
+    if (typeof google !== 'undefined' && google.script && google.script.url) {
+        google.script.url.getLocation(function(location) {
+            urlParams = new URLSearchParams(location.parameter);
+            initApp(urlParams);
+        });
+    } else {
+        urlParams = new URLSearchParams(window.location.search);
+        initApp(urlParams);
+    }
+});
+
+function initApp(urlParams) {
+    const tab = urlParams.get('tab');
+    if (tab === 'mycourses') showView('myCoursesView');
+    else showView('lessonList');
+}
+
+/* ==========================================
+   3. ฟังก์ชันคำนวณและช่วยเหลือ (Helpers)
+========================================== */
+function escapeHtml(unsafe) { return (unsafe || '').toString().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;"); }
+function escapeJsString(unsafe) { return (unsafe || '').toString().replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, "\\\""); }
+
+function formatMonthKey(monthKey) {
+    const thaiMonths = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+    const parts = monthKey.split('-');
+    const year = parseInt(parts[0]) + 543;
+    const month = parseInt(parts[1]) - 1;
+    return thaiMonths[month] + ' ' + String(year).slice(-2);
+}
+
+function getLessonProgressStats(lesson) {
+    if (!lesson.sections || lesson.sections.length === 0) return { total: 0, done: 0, percent: 0, isCompleted: false };
+    const total = lesson.sections.length;
+    const done = lesson.sections.filter(function(s) {
+        const secId = String(s.SectionID).trim();
+        const isVideoWatched = userInfo.progress.some(function(id) { return String(id).trim() === secId; });
+        let isQuizPassed = true; 
+        if (s.hasQuiz) {
+            isQuizPassed = s.quizScore && s.quizScore.TotalQuestions > 0 ? (s.quizScore.Score / s.quizScore.TotalQuestions) >= 0.5 : false; 
+        }
+        return isVideoWatched && isQuizPassed;
+    }).length;
+    const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+    return { total: total, done: done, percent: percent, isCompleted: done === total && total > 0 };
+}
+
+function getActualContentType(section) { return section.ContentType === 'external' ? 'external' : 'youtube'; }
+
+function getThumbnailUrl(lesson) {
+    if (lesson.sections && lesson.sections.length > 0) {
+        const firstSec = lesson.sections[0];
+        const cType = getActualContentType(firstSec);
+        if (cType === 'external') return 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80';
+        if (firstSec.YouTubeVideoID) {
+            let ytId = firstSec.YouTubeVideoID;
+            if (ytId.includes('v=')) ytId = ytId.split('v=')[1].split('&')[0];
+            else if (ytId.includes('youtu.be/')) ytId = ytId.split('youtu.be/')[1].split('?')[0];
+            return 'https://img.youtube.com/vi/' + ytId + '/maxresdefault.jpg';
+        }
+    }
+    return 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80';
+}
+
+function showToast(message, type) {
+    if (!type) type = 'success';
+    const toast = document.createElement('div');
+    const icon = type === 'success' 
+        ? '<div class="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center mr-3"><svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg></div>'
+        : '<div class="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center mr-3"><svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"></path></svg></div>';
+    
+    toast.className = 'fixed top-6 right-6 flex items-center p-4 bg-white/95 backdrop-blur-xl border border-slate-100 rounded-2xl shadow-xl z-[9999] transform transition-all duration-300 translate-x-full opacity-0 max-w-sm';
+    toast.innerHTML = icon + '<div><p class="text-sm font-bold text-slate-800">' + escapeHtml(message) + '</p></div>';
+    document.body.appendChild(toast);
+    requestAnimationFrame(function() { toast.classList.remove('translate-x-full', 'opacity-0'); });
+    setTimeout(function() {
+        toast.classList.add('translate-x-full', 'opacity-0');
+        setTimeout(function() { toast.remove(); }, 3000);
+    }, 3000);
+}
+
+function downloadCertificate(lessonId) {
+    const lesson = lessons.find(function(l) { return l.LessonID === lessonId; });
+    if (!lesson) return;
+    let fullName = userInfo.profile ? userInfo.profile.FullName : '';
+    if (!fullName) fullName = userInfo.profile ? userInfo.profile.Nickname : '';
+    if (!fullName) fullName = userInfo.email.split('@')[0];
+
+    document.getElementById('cert-name').innerText = fullName;
+    document.getElementById('cert-course').innerText = lesson.Title;
+    showToast('กำลังสร้างใบประกาศนียบัตร กรุณารอสักครู่...', 'success');
+
+    html2canvas(document.getElementById('certificate-template'), { scale: 2, useCORS: true, backgroundColor: null }).then(function(canvas) {
+        const link = document.createElement('a');
+        link.download = 'Certificate_' + lesson.Title.replace(/[^a-zA-Z0-9ก-๙]/g, '_') + '.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        showToast('ดาวน์โหลดใบประกาศนียบัตรสำเร็จ! 🎓', 'success');
+    }).catch(function(err) {
+        console.error("Error creating certificate:", err);
+        showToast('เกิดข้อผิดพลาดในการสร้างใบประกาศ', 'error');
+    });
+}
+</script>
