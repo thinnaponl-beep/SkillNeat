@@ -10,11 +10,10 @@ function filterSubCategories(selectedValue = '') {
 
     let html = '<option value="">-- ไม่ระบุหมวดย่อย --</option>';
     
-    if(masterData.categories) {
+    if(masterData && masterData.categories) {
         masterData.categories.forEach(cat => {
             if(cat.includes('|')) {
                 const parts = cat.split('|');
-                // parts[0] = หมวดหลัก, parts[1] = หมวดย่อย, parts[2] = คำอธิบาย (ถ้ามี)
                 if(parts[0] === mainCat) {
                     html += `<option value="${escapeHtml(parts[1])}">${escapeHtml(parts[1])}</option>`;
                 }
@@ -39,7 +38,6 @@ function renderLessonsList() {
 
     const filteredLessons = lessons.filter(function(lesson) {
         const matchKw = lesson.Title.toLowerCase().includes(searchKw);
-        // ค้นหาทั้ง MainCategory และ Category
         const matchCat = filterCat === '' || lesson.Category === filterCat || lesson.MainCategory === filterCat;
         return matchKw && matchCat;
     });
@@ -52,9 +50,28 @@ function renderLessonsList() {
     let html = '';
     filteredLessons.forEach(function(lesson) {
         const isActiveStr = lesson.IsActive ? '<span class="text-[10px] bg-[#31c1d7]/10 text-[#31c1d7] px-2 py-0.5 rounded font-bold">เผยแพร่แล้ว</span>' : '<span class="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded font-bold">ซ่อน</span>';
+        const isFeaturedStr = (lesson.IsFeatured === true || lesson.IsFeatured === 'TRUE' || String(lesson.IsFeatured).toLowerCase() === 'true') ? '<span class="text-[10px] bg-rose-100 text-rose-600 px-2 py-0.5 rounded font-bold ml-1.5 border border-rose-200">🔥 แนะนำ</span>' : '';
+        
+        // JAVIS ADDED: แสดงป้าย "แนะนำประจำหมวดหมู่" พร้อมโชว์ลำดับ (ถ้ามี)
+        let isCatFeatStr = '';
+        if (lesson.IsCategoryFeatured && String(lesson.IsCategoryFeatured) !== '0' && String(lesson.IsCategoryFeatured).toLowerCase() !== 'false') {
+             let orderStr = parseInt(lesson.IsCategoryFeatured) > 0 ? ' #' + parseInt(lesson.IsCategoryFeatured) : '';
+             isCatFeatStr = '<span class="text-[10px] bg-amber-100 text-amber-600 px-2 py-0.5 rounded font-bold ml-1.5 border border-amber-200">⭐ หมวดหมู่' + orderStr + '</span>';
+        }
         
         const mainCatStr = lesson.MainCategory ? '<span class="text-[10px] border border-blue-200 text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-bold ml-1.5">' + escapeHtml(lesson.MainCategory) + '</span>' : '';
         const categoryStr = lesson.Category ? '<span class="text-[10px] border border-[#31c1d7]/30 text-[#31c1d7] px-2 py-0.5 rounded font-bold ml-1.5">' + escapeHtml(lesson.Category) + '</span>' : '';
+        
+        let totalAvailableBN = 0;
+        const lessonSections = sections.filter(function(s) { return s.LessonID === lesson.LessonID; });
+        lessonSections.forEach(function(sec) {
+            totalAvailableBN += parseInt(sec.VideoPoints) || 10;
+            const hasQuiz = typeof quizzes !== 'undefined' && quizzes.some(function(q) { return q.SectionID === sec.SectionID; });
+            if (sec.questionCount > 0 || hasQuiz) {
+                totalAvailableBN += parseInt(sec.QuizPoints) || 50;
+            }
+        });
+        const bnBadge = '<span class="text-[10px] border border-amber-200 text-amber-600 bg-amber-50 px-2 py-0.5 rounded font-bold ml-1.5 flex items-center gap-1 flex-shrink-0"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 01.894 1.79l-1.233.616 1.738 5.42a1 1 0 01-.285 1.05A3.989 3.989 0 0115 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.715-5.349L11 6.477V16h2a1 1 0 110 2H7a1 1 0 110-2h2V6.477L6.237 7.582l1.715 5.349a1 1 0 01-.285 1.05A3.989 3.989 0 015 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.738-5.42-1.233-.617a1 1 0 01.894-1.788l1.599.799L9 4.323V3a1 1 0 011-1z" clip-rule="evenodd"></path></svg> Max ' + new Intl.NumberFormat().format(totalAvailableBN) + ' BN</span>';
         
         let targetInfo = '';
         if(lesson.TargetEmails) {
@@ -69,8 +86,8 @@ function renderLessonsList() {
             '<div class="flex-grow overflow-hidden">' +
             '<h4 class="font-bold text-slate-800 truncate text-sm">' + escapeHtml(lesson.Title) + '</h4>' +
             targetInfo +
-            '<div class="mt-2 flex items-center">' +
-            isActiveStr + mainCatStr + categoryStr +
+            '<div class="mt-2 flex items-center flex-wrap gap-y-1.5">' +
+            isActiveStr + isFeaturedStr + isCatFeatStr + mainCatStr + categoryStr + bnBadge +
             '</div>' +
             '</div>' +
             '<div class="flex space-x-1 ml-3 flex-shrink-0">' +
@@ -97,9 +114,239 @@ function selectLesson(lessonId) {
     renderQuizzesList();
 }
 
+/* ==========================================
+   ระบบ Tags ค้นหาและคลิกเลือก (แผนก, ตำแหน่ง, อีเมล)
+========================================== */
+window.currentDeptTags = window.currentDeptTags || [];
+window.currentPosTags = window.currentPosTags || [];
+window.currentEmailTags = window.currentEmailTags || [];
+
+function renderDeptTags() {
+    const wrapper = document.getElementById('selected-dept-tags');
+    if(!wrapper) return;
+    wrapper.innerHTML = '';
+    window.currentDeptTags.forEach(function(dept) {
+        const tag = document.createElement('span');
+        tag.className = 'inline-flex items-center px-2.5 py-1 rounded-md text-sm font-medium bg-[#31c1d7]/10 text-[#31c1d7] border border-[#31c1d7]/20 shadow-sm';
+        tag.innerHTML = escapeHtml(dept) + '<button type="button" onclick="window.removeDeptTag(\'' + escapeHtml(dept) + '\')" class="ml-1.5 inline-flex text-[#31c1d7] hover:text-red-500 focus:outline-none"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>';
+        wrapper.appendChild(tag);
+    });
+}
+window.addDeptTag = function(dept) {
+    if (dept && !window.currentDeptTags.includes(dept)) {
+        if (dept === 'ทั้งหมด (All)') window.currentDeptTags = ['ทั้งหมด (All)'];
+        else {
+            window.currentDeptTags = window.currentDeptTags.filter(function(d) { return d !== 'ทั้งหมด (All)'; });
+            window.currentDeptTags.push(dept);
+        }
+        renderDeptTags();
+    }
+    const input = document.getElementById('search-dept-input');
+    if(input) { input.value = ''; input.focus(); }
+    const sugBox = document.getElementById('dept-suggestions');
+    if(sugBox) sugBox.classList.add('hidden');
+};
+window.removeDeptTag = function(dept) {
+    window.currentDeptTags = window.currentDeptTags.filter(function(d) { return d !== dept; });
+    renderDeptTags();
+};
+
+function renderPosTags() {
+    const wrapper = document.getElementById('selected-pos-tags');
+    if(!wrapper) return;
+    wrapper.innerHTML = '';
+    window.currentPosTags.forEach(function(pos) {
+        const tag = document.createElement('span');
+        tag.className = 'inline-flex items-center px-2.5 py-1 rounded-md text-sm font-medium bg-[#31c1d7]/10 text-[#31c1d7] border border-[#31c1d7]/20 shadow-sm';
+        tag.innerHTML = escapeHtml(pos) + '<button type="button" onclick="window.removePosTag(\'' + escapeHtml(pos) + '\')" class="ml-1.5 inline-flex text-[#31c1d7] hover:text-red-500 focus:outline-none"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>';
+        wrapper.appendChild(tag);
+    });
+}
+window.addPosTag = function(pos) {
+    if (pos && !window.currentPosTags.includes(pos)) {
+        if (pos === 'ทั้งหมด (All)') window.currentPosTags = ['ทั้งหมด (All)'];
+        else {
+            window.currentPosTags = window.currentPosTags.filter(function(p) { return p !== 'ทั้งหมด (All)'; });
+            window.currentPosTags.push(pos);
+        }
+        renderPosTags();
+    }
+    const input = document.getElementById('search-pos-input');
+    if(input) { input.value = ''; input.focus(); }
+    const sugBox = document.getElementById('pos-suggestions');
+    if(sugBox) sugBox.classList.add('hidden');
+};
+window.removePosTag = function(pos) {
+    window.currentPosTags = window.currentPosTags.filter(function(p) { return p !== pos; });
+    renderPosTags();
+};
+
+function renderEmailTags() {
+    const wrapper = document.getElementById('email-tags-wrapper');
+    if(!wrapper) return;
+    wrapper.innerHTML = '';
+    window.currentEmailTags.forEach(function(email) {
+        const tag = document.createElement('span');
+        tag.className = 'inline-flex items-center px-2.5 py-1 rounded-md text-sm font-medium bg-indigo-100 text-indigo-700 border border-indigo-200 shadow-sm';
+        tag.innerHTML = escapeHtml(email) + '<button type="button" onclick="window.removeEmailTag(\'' + escapeHtml(email) + '\')" class="ml-1.5 inline-flex text-indigo-500 hover:text-red-500 focus:outline-none"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>';
+        wrapper.appendChild(tag);
+    });
+}
+window.addEmailTag = function(emailStr) {
+    const emails = emailStr.split(/[\s,]+/).map(function(s) { return s.trim().toLowerCase(); }).filter(Boolean);
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    let hasInvalid = false;
+    emails.forEach(function(email) {
+        if (!window.currentEmailTags.includes(email)) {
+            if (emailRegex.test(email)) window.currentEmailTags.push(email);
+            else hasInvalid = true;
+        }
+    });
+    if(hasInvalid) showAdminToast('ข้ามอีเมลรูปแบบไม่ถูกต้อง', 'warning');
+    renderEmailTags();
+    
+    const emailInput = document.getElementById('lesson-email-input');
+    if(emailInput) emailInput.value = '';
+};
+window.removeEmailTag = function(email) {
+    window.currentEmailTags = window.currentEmailTags.filter(function(e) { return e !== email; });
+    renderEmailTags();
+};
+window.selectEmailSuggestion = function(email) {
+    window.addEmailTag(email);
+    const input = document.getElementById('lesson-email-input');
+    if(input) { input.value = ''; input.focus(); }
+    const emailSuggestions = document.getElementById('email-suggestions');
+    if(emailSuggestions) emailSuggestions.classList.add('hidden');
+};
+
+function renderSuggestions(val, list, container, funcName) {
+    const query = val.trim().toLowerCase();
+    let matches = list;
+    if (query) {
+        matches = list.filter(function(item) { return String(item).toLowerCase().includes(query); });
+    }
+    if (matches.length > 0) {
+        let html = '';
+        matches.forEach(function(m) {
+            html += '<div class="px-4 py-2 hover:bg-[#31c1d7]/10 cursor-pointer text-sm font-medium text-slate-700 border-b border-slate-50 last:border-0 transition-colors" onmousedown="window.' + funcName + '(\'' + escapeJsString(m) + '\')">' + escapeHtml(m) + '</div>';
+        });
+        container.innerHTML = html;
+        container.classList.remove('hidden');
+    } else {
+        container.innerHTML = '<div class="px-4 py-3 text-sm text-slate-400 text-center font-medium border-dashed border border-slate-200 m-2 rounded-xl">ไม่พบข้อมูล</div>';
+        container.classList.remove('hidden');
+    }
+}
+
+let lessonFormEventsInitialized = false;
+function initLessonFormEvents() {
+    if (lessonFormEventsInitialized) return;
+    
+    const deptList = (typeof masterData !== 'undefined' && masterData && masterData.departments) ? masterData.departments : [];
+    const posList = (typeof masterData !== 'undefined' && masterData && masterData.positions) ? masterData.positions : [];
+    const userList = (typeof users !== 'undefined') ? users : [];
+
+    const deptInput = document.getElementById('search-dept-input');
+    const deptSug = document.getElementById('dept-suggestions');
+    if (deptInput && deptSug) {
+        deptInput.addEventListener('focus', function() { renderSuggestions('', deptList, deptSug, 'addDeptTag'); });
+        deptInput.addEventListener('input', function() { renderSuggestions(this.value, deptList, deptSug, 'addDeptTag'); });
+        deptInput.addEventListener('blur', function() { setTimeout(function() { deptSug.classList.add('hidden'); }, 200); });
+    }
+    
+    const posInput = document.getElementById('search-pos-input');
+    const posSug = document.getElementById('pos-suggestions');
+    if (posInput && posSug) {
+        posInput.addEventListener('focus', function() { renderSuggestions('', posList, posSug, 'addPosTag'); });
+        posInput.addEventListener('input', function() { renderSuggestions(this.value, posList, posSug, 'addPosTag'); });
+        posInput.addEventListener('blur', function() { setTimeout(function() { posSug.classList.add('hidden'); }, 200); });
+    }
+
+    const emailInput = document.getElementById('lesson-email-input');
+    const emailSuggestions = document.getElementById('email-suggestions');
+    if (emailInput) {
+        emailInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ',') { 
+                e.preventDefault(); 
+                if (this.value.trim() !== '') window.addEmailTag(this.value); 
+                if(emailSuggestions) emailSuggestions.classList.add('hidden');
+            }
+            if (e.key === 'Backspace' && this.value === '' && window.currentEmailTags.length > 0) { 
+                window.currentEmailTags.pop(); 
+                renderEmailTags(); 
+            }
+        });
+        
+        emailInput.addEventListener('focus', function(e) {
+            const matches = userList.slice(0, 10);
+            if (matches.length > 0) {
+                let html = '';
+                matches.forEach(function(u) {
+                    const name = u.FullName || u.Nickname || 'ไม่มีชื่อ';
+                    html += '<div class="px-4 py-2.5 hover:bg-[#31c1d7]/10 cursor-pointer border-b border-slate-50 last:border-0 transition-colors" onmousedown="window.selectEmailSuggestion(\'' + escapeJsString(u.Email) + '\')">' +
+                        '<div class="font-bold text-sm text-slate-700">' + escapeHtml(name) + '</div>' +
+                        '<div class="text-xs text-slate-500">' + escapeHtml(u.Email) + '</div>' +
+                    '</div>';
+                });
+                if(emailSuggestions) {
+                    emailSuggestions.innerHTML = html;
+                    emailSuggestions.classList.remove('hidden');
+                }
+            }
+        });
+
+        emailInput.addEventListener('input', function(e) {
+            const val = this.value.trim().toLowerCase();
+            if (!val || !emailSuggestions) {
+                if(emailSuggestions) emailSuggestions.classList.add('hidden');
+                return;
+            }
+            
+            const matches = userList.filter(function(u) {
+                const eMail = String(u.Email || '').toLowerCase();
+                const nName = String(u.FullName || '').toLowerCase();
+                const nick = String(u.Nickname || '').toLowerCase();
+                return eMail.includes(val) || nName.includes(val) || nick.includes(val);
+            }).slice(0, 10); 
+            
+            if (matches.length > 0) {
+                let html = '';
+                matches.forEach(function(u) {
+                    const name = u.FullName || u.Nickname || 'ไม่มีชื่อ';
+                    html += '<div class="px-4 py-2.5 hover:bg-[#31c1d7]/10 cursor-pointer border-b border-slate-50 last:border-0 transition-colors" onmousedown="window.selectEmailSuggestion(\'' + escapeJsString(u.Email) + '\')">' +
+                        '<div class="font-bold text-sm text-slate-700">' + escapeHtml(name) + '</div>' +
+                        '<div class="text-xs text-slate-500">' + escapeHtml(u.Email) + '</div>' +
+                    '</div>';
+                });
+                emailSuggestions.innerHTML = html;
+                emailSuggestions.classList.remove('hidden');
+            } else {
+                emailSuggestions.innerHTML = '<div class="px-4 py-3 text-sm text-slate-400 text-center font-medium border-dashed border border-slate-200 m-2 rounded-xl">ไม่พบรายชื่อพนักงาน</div>';
+                emailSuggestions.classList.remove('hidden');
+            }
+        });
+
+        emailInput.addEventListener('blur', function() { 
+            setTimeout(function() {
+                if (emailInput.value.trim() !== '') window.addEmailTag(emailInput.value); 
+                if(emailSuggestions) emailSuggestions.classList.add('hidden');
+            }, 200);
+        });
+    }
+    lessonFormEventsInitialized = true;
+}
+
+/* ==========================================
+   ฟังก์ชันเปิด/ปิด/บันทึก คอร์สเรียน
+========================================== */
+
 function openLessonModal(lessonId) {
     const modal = document.getElementById('lesson-modal');
     const form = document.getElementById('lesson-form');
+    
+    if(typeof initLessonFormEvents === 'function') initLessonFormEvents(); 
+
     form.reset();
 
     if (lessonId) {
@@ -109,46 +356,78 @@ function openLessonModal(lessonId) {
         document.getElementById('lesson-desc').value = lesson.Description;
         document.getElementById('lesson-is-active').checked = lesson.IsActive;
         
-        // ดึงข้อมูลหมวดหมู่มาแสดง
+        const isFeat = document.getElementById('lesson-is-featured');
+        if (isFeat) isFeat.checked = (lesson.IsFeatured === true || lesson.IsFeatured === 'TRUE' || String(lesson.IsFeatured).toLowerCase() === 'true');
+        
+        // JAVIS ADDED: โหลดค่า IsCategoryFeatured
+        const isCatFeat = document.getElementById('lesson-is-category-featured');
+        const catFeatOrder = document.getElementById('lesson-category-featured-order');
+        const catFeatContainer = document.getElementById('cat-feat-order-container');
+        
+        if (lesson.IsCategoryFeatured && String(lesson.IsCategoryFeatured) !== '0' && String(lesson.IsCategoryFeatured).toLowerCase() !== 'false') {
+            if (isCatFeat) isCatFeat.checked = true;
+            if (catFeatOrder) {
+                let orderVal = parseInt(lesson.IsCategoryFeatured);
+                catFeatOrder.value = isNaN(orderVal) ? 1 : orderVal;
+            }
+            if (catFeatContainer) catFeatContainer.classList.remove('hidden');
+        } else {
+            if (isCatFeat) isCatFeat.checked = false;
+            if (catFeatOrder) catFeatOrder.value = 1;
+            if (catFeatContainer) catFeatContainer.classList.add('hidden');
+        }
+
         if(lesson.MainCategory) document.getElementById('lesson-main-category').value = lesson.MainCategory;
         else document.getElementById('lesson-main-category').value = '';
         
-        // เรียก filter ก่อนเซ็ตค่าหมวดย่อย เพื่อให้ลิสต์ Dropdown ถูกสร้างขึ้นมาให้ตรงหมวด
         filterSubCategories(lesson.Category || '');
         
-        currentEmailTags = (lesson.TargetEmails || '').split(',').map(function(s) { return s.trim().toLowerCase(); }).filter(Boolean);
-        renderEmailTags();
-        document.getElementById('lesson-email-input').value = '';
+        window.currentEmailTags = (lesson.TargetEmails || '').split(',').map(function(s) { return s.trim().toLowerCase(); }).filter(Boolean);
+        if(typeof renderEmailTags === 'function') renderEmailTags();
+        const emailInput = document.getElementById('lesson-email-input');
+        if (emailInput) emailInput.value = '';
 
-        if (lesson.TargetDepartments) {
-            const depts = lesson.TargetDepartments.split(',').map(function(s) { return s.trim(); });
-            document.querySelectorAll('input[name="target-dept"]').forEach(function(box) {
-                if (depts.indexOf(box.value) !== -1) box.checked = true;
-            });
-        }
+        window.currentDeptTags = (lesson.TargetDepartments || '').split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+        if(typeof renderDeptTags === 'function') renderDeptTags();
+        const deptInput = document.getElementById('search-dept-input');
+        if (deptInput) deptInput.value = '';
 
-        if (lesson.TargetPositions) {
-            const positions = lesson.TargetPositions.split(',').map(function(s) { return s.trim(); });
-            document.querySelectorAll('input[name="target-pos"]').forEach(function(box) {
-                if (positions.indexOf(box.value) !== -1) box.checked = true;
-            });
-        }
+        window.currentPosTags = (lesson.TargetPositions || '').split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+        if(typeof renderPosTags === 'function') renderPosTags();
+        const posInput = document.getElementById('search-pos-input');
+        if (posInput) posInput.value = '';
+
         document.getElementById('lesson-modal-title').textContent = 'แก้ไขคอร์สเรียน';
     } else {
         document.getElementById('lesson-id').value = '';
         document.getElementById('lesson-is-active').checked = true;
-        document.getElementById('lesson-main-category').value = '';
+        const isFeat = document.getElementById('lesson-is-featured');
+        if (isFeat) isFeat.checked = false; 
         
+        const isCatFeat = document.getElementById('lesson-is-category-featured');
+        const catFeatOrder = document.getElementById('lesson-category-featured-order');
+        const catFeatContainer = document.getElementById('cat-feat-order-container');
+        if (isCatFeat) isCatFeat.checked = false;
+        if (catFeatOrder) catFeatOrder.value = 1;
+        if (catFeatContainer) catFeatContainer.classList.add('hidden');
+
+        document.getElementById('lesson-main-category').value = '';
         filterSubCategories(); 
         
-        const firstDept = document.querySelector('input[name="target-dept"][value="ทั้งหมด (All)"]');
-        if(firstDept) firstDept.checked = true;
-        const firstPos = document.querySelector('input[name="target-pos"][value="ทั้งหมด (All)"]');
-        if(firstPos) firstPos.checked = true;
+        window.currentEmailTags = [];
+        if(typeof renderEmailTags === 'function') renderEmailTags();
+        const emailInput = document.getElementById('lesson-email-input');
+        if (emailInput) emailInput.value = '';
 
-        currentEmailTags = [];
-        renderEmailTags();
-        document.getElementById('lesson-email-input').value = '';
+        window.currentDeptTags = ['ทั้งหมด (All)'];
+        if(typeof renderDeptTags === 'function') renderDeptTags();
+        const deptInput = document.getElementById('search-dept-input');
+        if (deptInput) deptInput.value = '';
+
+        window.currentPosTags = ['ทั้งหมด (All)'];
+        if(typeof renderPosTags === 'function') renderPosTags();
+        const posInput = document.getElementById('search-pos-input');
+        if (posInput) posInput.value = '';
 
         document.getElementById('lesson-modal-title').textContent = 'เพิ่มคอร์สเรียนใหม่';
     }
@@ -161,10 +440,15 @@ function saveLesson(e) {
     saveBtn.disabled = true;
     saveBtn.innerHTML = 'กำลังบันทึก...';
 
-    const selectedDepts = [];
-    document.querySelectorAll('input[name="target-dept"]:checked').forEach(function(el) { selectedDepts.push(el.value); });
-    const selectedPositions = [];
-    document.querySelectorAll('input[name="target-pos"]:checked').forEach(function(el) { selectedPositions.push(el.value); });
+    const isFeaturedEl = document.getElementById('lesson-is-featured');
+    
+    // JAVIS ADDED: ดึงค่าตัวเลขแนะนำประจำหมวด
+    const isCatFeaturedEl = document.getElementById('lesson-is-category-featured');
+    const catFeatOrderEl = document.getElementById('lesson-category-featured-order');
+    let categoryFeaturedValue = '0';
+    if (isCatFeaturedEl && isCatFeaturedEl.checked) {
+        categoryFeaturedValue = catFeatOrderEl && catFeatOrderEl.value ? catFeatOrderEl.value : '1';
+    }
 
     const lessonData = {
         LessonID: document.getElementById('lesson-id').value,
@@ -173,9 +457,11 @@ function saveLesson(e) {
         MainCategory: document.getElementById('lesson-main-category').value, 
         Category: document.getElementById('lesson-category').value,
         IsActive: document.getElementById('lesson-is-active').checked,
-        TargetDepartments: selectedDepts.join(', '),
-        TargetPositions: selectedPositions.join(', '),
-        TargetEmails: currentEmailTags.join(',')
+        IsFeatured: isFeaturedEl ? isFeaturedEl.checked : false, 
+        IsCategoryFeatured: categoryFeaturedValue, 
+        TargetDepartments: window.currentDeptTags ? window.currentDeptTags.join(', ') : '',
+        TargetPositions: window.currentPosTags ? window.currentPosTags.join(', ') : '',
+        TargetEmails: window.currentEmailTags ? window.currentEmailTags.join(',') : ''
     };
 
     const isNew = !lessonData.LessonID;
@@ -233,7 +519,7 @@ function deleteLesson(lessonId) {
 }
 
 /* ==========================================
-   4. ระบบจัดการวิดีโอ (Sections)
+   4. ระบบจัดการวิดีโอ (Sections) - และระบบ Sortable ลากวาง
 ========================================== */
 
 function updateSectionUrlLabel() {
@@ -257,19 +543,22 @@ function renderSectionsList() {
 
     if (!activeLessonId) {
         container.innerHTML = '<div class="text-center p-8 text-slate-400">กรุณาเลือกคอร์สเรียนด้านซ้ายก่อน</div>';
-        headerTitle.textContent = 'วิดีโอ (เลือกคอร์สก่อน)';
+        headerTitle.textContent = 'เนื้อหาย่อย (เลือกคอร์สก่อน)';
         return;
     }
 
     const lessonSections = sections.filter(function(s) { return s.LessonID === activeLessonId; }).sort(function(a,b) { return a.Order - b.Order; });
-    headerTitle.textContent = 'วิดีโอในคอร์ส (' + lessonSections.length + ')';
+    headerTitle.textContent = 'เนื้อหาย่อย (' + lessonSections.length + ')';
 
     if (lessonSections.length === 0) {
-        container.innerHTML = '<div class="text-center p-8 text-slate-400 border border-dashed border-slate-200 rounded-xl mt-4">ยังไม่มีวิดีโอในคอร์สนี้</div>';
+        container.innerHTML = '<div class="text-center p-8 text-slate-400 border border-dashed border-slate-200 rounded-xl mt-4">ยังไม่มีเนื้อหาในคอร์สนี้</div>';
         return;
     }
 
-    let html = '<div class="space-y-3">';
+    const dragIcon = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"></path></svg>';
+
+    // JAVIS ADDED: เพิ่ม ID sections-sortable-container ให้คอลัมน์เนื้อหาย่อย
+    let html = '<div class="space-y-3" id="sections-sortable-container">';
     lessonSections.forEach(function(sec) {
         const vp = sec.VideoPoints !== undefined ? sec.VideoPoints : 10;
         const qp = sec.QuizPoints !== undefined ? sec.QuizPoints : 50;
@@ -278,9 +567,10 @@ function renderSectionsList() {
         if (sec.ContentType === 'external') typeBadge = '<span class="text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded font-bold ml-2 shadow-sm">External</span>';
         else typeBadge = '<span class="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold ml-2 shadow-sm">YouTube</span>';
 
-        html += '<div class="admin-list-item bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center cursor-pointer hover:border-emerald-300 transition-colors ' + (activeSectionId === sec.SectionID ? 'ring-2 ring-emerald-400 bg-emerald-50/30' : '') + '" onclick="selectSection(\'' + sec.SectionID + '\')">' +
+        html += '<div class="admin-list-item section-item bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center hover:border-emerald-300 transition-colors ' + (activeSectionId === sec.SectionID ? 'ring-2 ring-emerald-400 bg-emerald-50/30' : '') + '" onclick="selectSection(\'' + sec.SectionID + '\')" data-id="' + sec.SectionID + '">' +
             '<div class="flex items-center flex-grow overflow-hidden">' +
-            '<div class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm flex-shrink-0">' + sec.Order + '</div>' +
+            '<div class="drag-handle cursor-move p-2 text-slate-300 hover:text-emerald-500 mr-1" title="ลากเพื่อจัดลำดับ">' + dragIcon + '</div>' + 
+            '<div class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm flex-shrink-0 section-order-badge">' + sec.Order + '</div>' +
             '<div class="ml-3 truncate flex-grow">' +
             '<p class="font-bold text-slate-800 text-sm truncate">' + escapeHtml(sec.Title) + typeBadge + '</p>' +
             '<p class="text-[10px] text-slate-500 mt-1 font-medium tracking-wide">ดูจบ: <span class="text-[#31c1d7] font-bold">' + vp + ' BN</span> | สอบผ่าน: <span class="text-[#31c1d7] font-bold">' + qp + ' BN</span></p>' +
@@ -298,6 +588,47 @@ function renderSectionsList() {
     });
     html += '</div>';
     container.innerHTML = html;
+
+    // JAVIS ADDED: ผูกระบบลากและวาง (SortableJS) ให้กับคอลัมน์เนื้อหาย่อย
+    const sortableContainer = document.getElementById('sections-sortable-container');
+    if (sortableContainer && typeof Sortable !== 'undefined') {
+        if (window.sectionSortable) { window.sectionSortable.destroy(); }
+        window.sectionSortable = new Sortable(sortableContainer, {
+            animation: 150,
+            ghostClass: 'sortable-ghost',
+            handle: '.drag-handle',
+            onEnd: function(evt) {
+                const items = sortableContainer.querySelectorAll('.section-item');
+                let updates = [];
+                items.forEach((item, index) => {
+                    const newOrder = index + 1;
+                    item.querySelector('.section-order-badge').textContent = newOrder;
+                    const secId = item.getAttribute('data-id');
+                    
+                    const secIndex = sections.findIndex(s => s.SectionID === secId);
+                    if (secIndex > -1) {
+                        if (sections[secIndex].Order != newOrder) {
+                            sections[secIndex].Order = newOrder;
+                            updates.push(sections[secIndex]);
+                        }
+                    }
+                });
+
+                if (updates.length > 0) {
+                    showAdminToast('กำลังบันทึกลำดับเนื้อหา...', 'success');
+                    let completed = 0;
+                    updates.forEach(sec => {
+                        google.script.run.withSuccessHandler(function() {
+                            completed++;
+                            if(completed === updates.length) {
+                                showAdminToast('อัปเดตลำดับเนื้อหาเรียบร้อยแล้ว', 'success');
+                            }
+                        }).saveSection(sec);
+                    });
+                }
+            }
+        });
+    }
 }
 
 function selectSection(sectionId) {
@@ -308,7 +639,7 @@ function selectSection(sectionId) {
 
 function openSectionModal(sectionId) {
     if (!activeLessonId && !sectionId) {
-        showAdminToast('กรุณาเลือกคอร์สเรียนหลักก่อนเพิ่มวิดีโอครับ', 'warning');
+        showAdminToast('กรุณาเลือกคอร์สเรียนหลักก่อนเพิ่มเนื้อหาครับ', 'warning');
         return;
     }
 
@@ -325,6 +656,7 @@ function openSectionModal(sectionId) {
         
         document.getElementById('section-video-points').value = sec.VideoPoints !== undefined ? sec.VideoPoints : 10;
         document.getElementById('section-quiz-points').value = sec.QuizPoints !== undefined ? sec.QuizPoints : 50;
+        document.getElementById('section-duration').value = sec.Duration !== undefined ? sec.Duration : 15;
         
         document.getElementById('section-content-type').value = sec.ContentType || 'youtube';
 
@@ -339,6 +671,7 @@ function openSectionModal(sectionId) {
 
         document.getElementById('section-video-points').value = 10;
         document.getElementById('section-quiz-points').value = 50;
+        document.getElementById('section-duration').value = 15;
         
         document.getElementById('section-content-type').value = 'youtube';
 
@@ -362,6 +695,7 @@ function saveSection(e) {
         Title: document.getElementById('section-title').value,
         YouTubeVideoID: document.getElementById('section-youtube').value, 
         Order: document.getElementById('section-order').value,
+        Duration: parseInt(document.getElementById('section-duration').value) || 15,
         VideoPoints: parseInt(document.getElementById('section-video-points').value) || 0,
         QuizPoints: parseInt(document.getElementById('section-quiz-points').value) || 0,
         ContentType: document.getElementById('section-content-type').value 
@@ -426,14 +760,14 @@ function renderQuizzesList() {
     if (!container) return;
 
     if (!activeSectionId) {
-        container.innerHTML = '<div class="text-center p-8 text-slate-400">กรุณาเลือกวิดีโอด้านซ้ายก่อน</div>';
+        container.innerHTML = '<div class="text-center p-8 text-slate-400">กรุณาเลือกเนื้อหาด้านซ้ายก่อน</div>';
         return;
     }
 
     const sectionQuizzes = quizzes.filter(function(q) { return q.SectionID === activeSectionId; });
     
     if (sectionQuizzes.length === 0) {
-        container.innerHTML = '<div class="text-center p-6 text-slate-400 border border-dashed border-slate-200 rounded-xl mt-4 text-sm">วิดีโอนี้ยังไม่มีแบบทดสอบ</div>';
+        container.innerHTML = '<div class="text-center p-6 text-slate-400 border border-dashed border-slate-200 rounded-xl mt-4 text-sm">เนื้อหานี้ยังไม่มีแบบทดสอบ</div>';
         return;
     }
 
@@ -500,7 +834,7 @@ function addQuizOption(value, isCorrect) {
 
 function openQuizModal(quizId) {
     if (!activeSectionId) {
-        showAdminToast('กรุณาเลือกวิดีโอก่อนเพิ่มข้อสอบครับ', 'warning');
+        showAdminToast('กรุณาเลือกเนื้อหาก่อนเพิ่มข้อสอบครับ', 'warning');
         return;
     }
 
@@ -525,12 +859,12 @@ function openQuizModal(quizId) {
         if (!options || options.length === 0) {
             document.getElementById('quiz-type').value = 'subjective';
             currentAnswerTags = correctAns ? correctAns.split(',').map(function(s) { return s.trim(); }).filter(Boolean) : [];
-            renderAnswerTags();
+            if(typeof renderAnswerTags === 'function') renderAnswerTags();
             document.getElementById('subjective-answer-input').value = '';
         } else {
             document.getElementById('quiz-type').value = 'multiple_choice';
             currentAnswerTags = [];
-            renderAnswerTags();
+            if(typeof renderAnswerTags === 'function') renderAnswerTags();
             options.forEach(function(opt) {
                 addQuizOption(opt, opt === correctAns);
             });
@@ -543,7 +877,7 @@ function openQuizModal(quizId) {
         document.getElementById('quiz-type').value = 'multiple_choice';
         
         currentAnswerTags = [];
-        renderAnswerTags();
+        if(typeof renderAnswerTags === 'function') renderAnswerTags();
         addQuizOption('', true);
         addQuizOption('', false);
         
@@ -564,7 +898,7 @@ function saveQuiz(e) {
 
     if (type === 'subjective') {
         const leftover = document.getElementById('subjective-answer-input').value.trim();
-        if(leftover) addAnswerTag(leftover);
+        if(leftover && typeof addAnswerTag === 'function') addAnswerTag(leftover);
         
         finalAnswer = currentAnswerTags.join(',');
         if (!finalAnswer) {
@@ -666,5 +1000,22 @@ function deleteQuiz(quizId) {
                 .deleteQuestion(quizId); 
         }
     });
+}
+
+function showCourseLearners(lessonId) {
+    const modal = document.getElementById('course-learners-modal');
+    const content = document.getElementById('course-learners-content');
+    if(!modal || !content) {
+         showAdminToast('ดูสถิติเพิ่มเติมได้ที่แท็บ รายงานผู้เรียน', 'info');
+         return;
+    }
+    const lesson = lessons.find(function(l) { return l.LessonID === lessonId; });
+    
+    // JAVIS FIX: อัปเดตข้อความพร้อมแสดงชื่อคอร์ส
+    const titleEl = document.getElementById('course-learners-title');
+    if(titleEl) titleEl.textContent = 'ผู้เรียน: ' + (lesson ? lesson.Title : '');
+    
+    content.innerHTML = '<div class="text-center p-8 text-slate-500 bg-white rounded-xl border border-slate-100"><div class="text-4xl mb-3">📊</div>สามารถดูความคืบหน้าของผู้เรียนแบบละเอียด<br>ได้ที่แท็บ <b class="text-[#31c1d7]">"รายงานผู้เรียน"</b> ครับ<br><button onclick="closeModals(); switchAdminTab(\'dashboard\');" class="mt-4 px-6 py-2 bg-[#31c1d7] text-white font-bold rounded-lg shadow-sm hover:bg-[#1eb0c6] transition-colors">ไปที่หน้ารายงาน</button></div>';
+    modal.classList.remove('hidden');
 }
 </script>
