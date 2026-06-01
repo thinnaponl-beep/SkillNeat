@@ -488,9 +488,14 @@ function renderModernCardNetflix(lesson) {
     
     let actionsHtml = '';
     if (stats.isCompleted) {
+        let certBtnHtml = '';
+        if (lesson.HasCertificate === true || lesson.HasCertificate === 'TRUE' || String(lesson.HasCertificate).toLowerCase() === 'true') {
+            certBtnHtml = '<button onclick="event.stopPropagation(); downloadCertificate(\'' + safeLessonId + '\')" class="w-full font-bold py-2 rounded-xl transition-all text-[11px] bg-amber-50 text-amber-600 hover:bg-amber-500 hover:text-white border border-amber-200" title="ดาวน์โหลดใบประกาศ">🎓 รับใบประกาศ</button>';
+        }
+        
         actionsHtml = '<div class="flex gap-2 mt-3">' +
             '<button onclick="event.stopPropagation(); showLessonDetails(\'' + safeLessonId + '\')" class="w-full font-bold py-2 rounded-xl transition-all text-[11px] bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white">ทบทวน</button>' +
-            '<button onclick="event.stopPropagation(); downloadCertificate(\'' + safeLessonId + '\')" class="w-full font-bold py-2 rounded-xl transition-all text-[11px] bg-amber-50 text-amber-600 hover:bg-amber-500 hover:text-white border border-amber-200" title="ดาวน์โหลดใบประกาศ">🎓 รับใบประกาศ</button>' +
+            certBtnHtml +
         '</div>';
     } else {
         actionsHtml = '<button class="mt-3 w-full font-bold py-2 rounded-xl transition-all text-[12px] border ' + btnClass + '">' + ((stats.done > 0 || started) ? 'เรียนต่อ' : 'เริ่มเรียน') + '</button>';
@@ -566,9 +571,14 @@ function renderModernCard(lesson) {
 
     let actionsHtml = '';
     if (stats.isCompleted) {
+        let certBtnHtml = '';
+        if (lesson.HasCertificate === true || lesson.HasCertificate === 'TRUE' || String(lesson.HasCertificate).toLowerCase() === 'true') {
+            certBtnHtml = '<button onclick="event.stopPropagation(); downloadCertificate(\'' + safeLessonId + '\')" class="w-full font-bold py-2 rounded-xl transition-all text-[12px] bg-amber-50 text-amber-600 hover:bg-amber-500 hover:text-white border border-amber-200" title="ดาวน์โหลดใบประกาศ">🎓 รับใบประกาศ</button>';
+        }
+        
         actionsHtml = '<div class="flex gap-2">' +
             '<button onclick="event.stopPropagation(); showLessonDetails(\'' + safeLessonId + '\')" class="w-full font-bold py-2 rounded-xl transition-all text-[12px] bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white">ทบทวน</button>' +
-            '<button onclick="event.stopPropagation(); downloadCertificate(\'' + safeLessonId + '\')" class="w-full font-bold py-2 rounded-xl transition-all text-[12px] bg-amber-50 text-amber-600 hover:bg-amber-500 hover:text-white border border-amber-200" title="ดาวน์โหลดใบประกาศ">🎓 รับใบประกาศ</button>' +
+            certBtnHtml +
         '</div>';
     } else {
         actionsHtml = '<button class="w-full font-bold py-2 rounded-xl transition-all text-[12px] border ' + btnClass + '">' + ((stats.done > 0 || started) ? 'เรียนต่อ' : 'เริ่มเรียน') + '</button>';
@@ -654,7 +664,10 @@ function showLessonDetails(lessonId) {
         });
     }
 
-    let certBtn = stats.isCompleted ? '<button onclick="downloadCertificate(\'' + safeLessonId + '\')" class="mt-3 sm:mt-0 px-3 py-1.5 bg-amber-50 text-amber-600 hover:bg-amber-500 hover:text-white rounded-lg font-bold text-xs transition-all shadow-sm border border-amber-200 flex items-center gap-1"><span class="text-sm">🎓</span> รับใบประกาศ</button>' : '';
+    let certBtn = '';
+    if (stats.isCompleted && (lesson.HasCertificate === true || lesson.HasCertificate === 'TRUE' || String(lesson.HasCertificate).toLowerCase() === 'true')) {
+        certBtn = '<button onclick="downloadCertificate(\'' + safeLessonId + '\')" class="mt-3 sm:mt-0 px-3 py-1.5 bg-amber-50 text-amber-600 hover:bg-amber-500 hover:text-white rounded-lg font-bold text-xs transition-all shadow-sm border border-amber-200 flex items-center gap-1"><span class="text-sm">🎓</span> รับใบประกาศ</button>';
+    }
 
     let html = '<div class="flex justify-between items-start mb-8">' +
         '<div class="flex space-x-6 items-start">' +
@@ -676,6 +689,19 @@ function showLessonDetails(lessonId) {
         const isPending = sec.externalProof && sec.externalProof.Status === 'Pending';
         const isRejected = sec.externalProof && sec.externalProof.Status === 'Rejected';
 
+        // JAVIS ADDED: เช็คสถานะว่าต้อง "ล็อก" บทเรียนนี้หรือไม่
+        let isLocked = false;
+        if (index > 0) {
+             const prevSec = lesson.sections[index - 1];
+             const prevVideoDone = userInfo.progress.some(function(id) { return String(id).trim() === String(prevSec.SectionID).trim(); });
+             const prevQuizPassed = !prevSec.hasQuiz || (prevSec.quizScore && (prevSec.quizScore.Score / prevSec.quizScore.TotalQuestions) >= 0.5);
+             
+             // ถ้าบทก่อนหน้า "ยังดูวิดีโอไม่จบ" หรือ "ยังสอบไม่ผ่าน" ให้ล็อกบทปัจจุบัน
+             if (!prevVideoDone || !prevQuizPassed) {
+                 isLocked = true;
+             }
+        }
+
         let icon = '';
         if (isDone) {
             icon = '<div class="w-8 h-8 rounded-full bg-emerald-100 text-emerald-500 flex items-center justify-center flex-shrink-0 shadow-sm"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg></div>';
@@ -683,6 +709,8 @@ function showLessonDetails(lessonId) {
             icon = '<div class="w-8 h-8 rounded-full bg-amber-100 text-amber-500 flex items-center justify-center flex-shrink-0 shadow-sm"><svg class="animate-spin w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>';
         } else if (isRejected) {
              icon = '<div class="w-8 h-8 rounded-full bg-rose-100 text-rose-500 flex items-center justify-center flex-shrink-0 shadow-sm"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"></path></svg></div>';
+        } else if (isLocked) {
+             icon = '<div class="w-8 h-8 rounded-full bg-slate-200 text-slate-400 flex items-center justify-center flex-shrink-0 shadow-inner"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg></div>';
         } else {
             icon = '<div class="w-8 h-8 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center flex-shrink-0 font-bold text-sm shadow-sm">' + (index + 1) + '</div>';
         }
@@ -714,6 +742,10 @@ function showLessonDetails(lessonId) {
                 '</button>';
             }
             actionBtn += '</div>';
+        } else if (isLocked) {
+            actionBtn = '<div class="flex items-center gap-2 mt-2 sm:mt-0">';
+            actionBtn += '<button class="px-5 py-2 bg-slate-100 text-slate-400 cursor-not-allowed shadow-none rounded-xl font-bold text-sm flex items-center gap-1 transition-all"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg> ล็อก</button>';
+            actionBtn += '</div>';
         } else {
             const btnText = isRejected ? 'ส่งหลักฐานใหม่' : 'เริ่มเรียน';
             const btnClass = isRejected ? 'bg-rose-500 hover:bg-rose-600 shadow-rose-500/20' : 'bg-[#31c1d7] hover:bg-[#1eb0c6] shadow-[#31c1d7]/20';
@@ -732,6 +764,7 @@ function showLessonDetails(lessonId) {
         if (isDone) bgClass = 'bg-emerald-50/30 border-emerald-100';
         else if (isPending) bgClass = 'bg-amber-50/30 border-amber-100';
         else if (isRejected) bgClass = 'bg-rose-50/30 border-rose-100';
+        else if (isLocked) bgClass = 'bg-slate-50/50 border-slate-200 opacity-60 grayscale-[0.2]';
 
         let vp = parseInt(sec.VideoPoints, 10); if(isNaN(vp)) vp = 10;
         let qp = parseInt(sec.QuizPoints, 10); if(isNaN(qp)) qp = 50;
@@ -907,6 +940,20 @@ window.selectCustomCategory = function(val, text) {
     document.getElementById('custom-category-text').textContent = text;
     window.toggleCustomCategoryMenu(); 
     if(typeof handleSearchFilter === 'function') handleSearchFilter();
+};
+
+window.closeLessonDetailsModal = function() {
+    const modal = document.getElementById('lesson-details-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+};
+
+window.closeCertPreview = function() {
+    const modal = document.getElementById('cert-preview-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
 };
 
 // ซ่อน Dropdown เมื่อคลิกที่อื่น
