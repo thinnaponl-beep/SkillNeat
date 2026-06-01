@@ -6,19 +6,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;700;800&display=swap" rel="stylesheet">
-  <!-- JAVIS ADDED: ไลบรารี SortableJS สำหรับลากและวาง (Drag & Drop) -->
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
   <?!= include('Global_CSS'); ?>
   <style>
     .checkbox-group-scroll { max-height: 140px; overflow-y: auto; }
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-    
-    /* เอฟเฟกต์เพิ่มเติมสำหรับ Leaderboard */
     .leaderboard-card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
     .leaderboard-card:hover { transform: translateY(-4px); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05); }
-    
-    /* สไตล์คลาสตอนลาก (Drag) หมวดหมู่ */
     .sortable-ghost { opacity: 0.4; background-color: #f8fafc; }
     .drag-handle { cursor: grab; }
     .drag-handle:active { cursor: grabbing; }
@@ -309,7 +304,35 @@
             <div id="dashboard-leaderboard-others"></div>
         </div>
 
-        <div class="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col mt-8">
+        <!-- JAVIS ADDED: สถิติคอร์สเรียนยอดนิยม -->
+        <div class="mt-10 mb-4 flex items-center gap-2 pl-2">
+            <span class="text-2xl">📈</span>
+            <div>
+                <h3 class="text-lg font-bold text-slate-800">Top 10 คอร์สเรียนยอดนิยม (Popular Courses)</h3>
+                <p class="text-sm text-slate-500 mt-0.5">จัดอันดับจากจำนวนผู้เข้าเรียนที่มากที่สุดในระบบ</p>
+            </div>
+        </div>
+        <div class="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden mb-8">
+            <div class="w-full overflow-x-auto custom-scrollbar">
+                <table class="w-full text-left border-collapse whitespace-nowrap">
+                    <thead>
+                        <tr class="bg-slate-50/80 text-slate-600 text-sm border-b border-slate-200">
+                            <th class="p-4 font-bold text-center w-16">อันดับ</th>
+                            <th class="p-4 font-bold">ชื่อคอร์สเรียน</th>
+                            <th class="p-4 font-bold">หมวดหมู่</th>
+                            <th class="p-4 font-bold text-center">จำนวนผู้เรียน (คน)</th>
+                            <th class="p-4 font-bold text-center">เนื้อหาย่อย (ตอน)</th>
+                            <th class="p-4 font-bold text-center">ยอดเรียนจบ (ครั้ง)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dashboard-popular-courses-list" class="text-sm text-slate-700 divide-y divide-slate-100">
+                        <tr><td colspan="6" class="p-8 text-center text-slate-500">กำลังประมวลผลข้อมูล...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col mt-4">
             <div class="p-6 border-b border-slate-100 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                 <div>
                     <h3 class="text-lg font-bold text-slate-800">ข้อมูลพนักงานรายบุคคล</h3>
@@ -402,6 +425,18 @@
                     </label>
                 </div>
 
+                <!-- JAVIS ADDED: สวิตช์สำหรับเลือกว่าจะให้ออกใบประกาศหรือไม่ -->
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="font-bold text-slate-800 flex items-center gap-1">🎓 ออกใบประกาศนียบัตร</p>
+                        <p class="text-xs text-slate-500 mt-0.5">ผู้เรียนจะได้รับ Certificate เมื่อเรียนจบ</p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="lesson-has-certificate" class="sr-only peer" checked>
+                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                    </label>
+                </div>
+
                 <!-- สวิตช์ตั้งเป็นคอร์สแนะนำประจำหมวดหมู่ และ มีให้ระบุลำดับ -->
                 <div class="bg-amber-50 p-4 rounded-xl border border-amber-200 shadow-sm flex flex-col gap-3">
                     <div class="flex items-center justify-between">
@@ -414,7 +449,6 @@
                             <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
                         </label>
                     </div>
-                    <!-- JAVIS ADDED: ช่องระบุลำดับการแนะนำ ถ้าปิดซ่อนไว้ -->
                     <div id="cat-feat-order-container" class="hidden flex items-center gap-2 border-t border-amber-200/50 pt-3">
                         <label class="text-[11px] font-bold text-amber-800">ระบุลำดับการขึ้นแสดง :</label>
                         <input type="number" id="lesson-category-featured-order" min="1" value="1" class="w-16 px-2 py-1 bg-white border border-amber-200 rounded text-center text-sm focus:ring-1 focus:ring-amber-500 outline-none text-amber-700 font-bold">
@@ -627,7 +661,6 @@
     </div>
   </div>
 
-  <!-- JAVIS ADDED: Modal สำหรับแก้ไขหมวดหมู่และแผนก (รวมถึงตั้งค่าดันขึ้นหน้าแรก) -->
   <div id="edit-category-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden z-[200] flex justify-center items-center p-4 transition-opacity">
     <form id="edit-category-form" onsubmit="saveEditedCategory(event)" class="bg-white rounded-3xl w-full max-w-md shadow-xl overflow-hidden transform transition-all scale-95 opacity-0">
         <div class="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-white">
@@ -647,7 +680,6 @@
                 <input type="text" id="edit-category-desc" class="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#31c1d7] outline-none shadow-sm">
             </div>
             
-            <!-- JAVIS ADDED: สวิตช์ตั้งเป็นหมวดแนะนำสำหรับการ Edit -->
             <div id="edit-category-featured-container" class="hidden items-center justify-between mt-4 bg-rose-50 border border-rose-100 p-3 rounded-xl">
                 <div>
                     <p class="text-sm font-bold text-rose-700">⭐ ตั้งเป็นหมวดแนะนำ</p>
@@ -667,7 +699,6 @@
     </form>
   </div>
 
-  <!-- Custom Confirm Modal -->
   <div id="custom-confirm-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden z-[9999] flex justify-center items-center p-4 transition-opacity duration-300 opacity-0">
       <div id="custom-confirm-box" class="bg-white rounded-[2rem] w-full max-w-sm shadow-2xl p-8 text-center transform scale-95 transition-transform duration-300">
           <div id="custom-confirm-icon-wrapper" class="w-20 h-20 rounded-full mx-auto flex items-center justify-center mb-5 shadow-inner bg-rose-50 text-rose-500">
