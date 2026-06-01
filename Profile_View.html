@@ -68,14 +68,20 @@
             </h3>
             <div class="grid grid-cols-1 gap-8">
               <div>
-                <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3" for="input-fullname">ชื่อ - นามสกุลจริง</label>
+                <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3" for="input-fullname">
+                  ชื่อ - นามสกุลจริง <span class="text-rose-500 lowercase tracking-normal text-[11px]">(โปรดใส่ข้อมูลจริง ชื่อจะแสดงใน Certificate)</span>
+                </label>
                 <input type="text" id="input-fullname" value="<?= (typeof userProfile !== 'undefined' && userProfile && userProfile.FullName) ? userProfile.FullName : '' ?>" class="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-[#31c1d7]/10 focus:border-[#31c1d7] outline-none transition-all text-slate-700 font-bold">
               </div>
+
               <div>
-                <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3" for="input-nickname">ชื่อเล่น (Nickname)</label>
+                <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3" for="input-nickname">
+                  ชื่อเล่น <span class="text-emerald-500 lowercase tracking-normal text-[11px]">(สามารถตั้งได้ตามสบาย ชื่อจะแสดงในโปรไฟล์และ Dashboard)</span>
+                </label>
                 <input type="text" id="input-nickname" value="<?= (typeof userProfile !== 'undefined' && userProfile && userProfile.Nickname) ? userProfile.Nickname : '' ?>" class="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-[#31c1d7]/10 focus:border-[#31c1d7] outline-none transition-all text-slate-700 font-bold">
               </div>
             </div>
+            
             <div class="mt-12 flex justify-end">
               <button id="save-profile-btn" class="px-10 py-4 bg-slate-800 text-white font-black rounded-2xl shadow-xl hover:bg-[#31c1d7] transition-all duration-500 transform hover:-translate-y-1">
                 บันทึกการเปลี่ยนแปลง
