@@ -51,8 +51,8 @@ function renderLessonsList() {
     filteredLessons.forEach(function(lesson) {
         const isActiveStr = lesson.IsActive ? '<span class="text-[10px] bg-[#31c1d7]/10 text-[#31c1d7] px-2 py-0.5 rounded font-bold">เผยแพร่แล้ว</span>' : '<span class="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded font-bold">ซ่อน</span>';
         const isFeaturedStr = (lesson.IsFeatured === true || lesson.IsFeatured === 'TRUE' || String(lesson.IsFeatured).toLowerCase() === 'true') ? '<span class="text-[10px] bg-rose-100 text-rose-600 px-2 py-0.5 rounded font-bold ml-1.5 border border-rose-200">🔥 แนะนำ</span>' : '';
+        const hasCertStr = (lesson.HasCertificate === true || lesson.HasCertificate === 'TRUE' || String(lesson.HasCertificate).toLowerCase() === 'true') ? '<span class="text-[10px] bg-amber-100 text-amber-600 px-2 py-0.5 rounded font-bold ml-1.5 border border-amber-200" title="ให้ใบประกาศนียบัตร">🎓 มีใบประกาศ</span>' : '';
         
-        // JAVIS ADDED: แสดงป้าย "แนะนำประจำหมวดหมู่" พร้อมโชว์ลำดับ (ถ้ามี)
         let isCatFeatStr = '';
         if (lesson.IsCategoryFeatured && String(lesson.IsCategoryFeatured) !== '0' && String(lesson.IsCategoryFeatured).toLowerCase() !== 'false') {
              let orderStr = parseInt(lesson.IsCategoryFeatured) > 0 ? ' #' + parseInt(lesson.IsCategoryFeatured) : '';
@@ -87,7 +87,7 @@ function renderLessonsList() {
             '<h4 class="font-bold text-slate-800 truncate text-sm">' + escapeHtml(lesson.Title) + '</h4>' +
             targetInfo +
             '<div class="mt-2 flex items-center flex-wrap gap-y-1.5">' +
-            isActiveStr + isFeaturedStr + isCatFeatStr + mainCatStr + categoryStr + bnBadge +
+            isActiveStr + isFeaturedStr + isCatFeatStr + hasCertStr + mainCatStr + categoryStr + bnBadge +
             '</div>' +
             '</div>' +
             '<div class="flex space-x-1 ml-3 flex-shrink-0">' +
@@ -359,7 +359,9 @@ function openLessonModal(lessonId) {
         const isFeat = document.getElementById('lesson-is-featured');
         if (isFeat) isFeat.checked = (lesson.IsFeatured === true || lesson.IsFeatured === 'TRUE' || String(lesson.IsFeatured).toLowerCase() === 'true');
         
-        // JAVIS ADDED: โหลดค่า IsCategoryFeatured
+        const hasCert = document.getElementById('lesson-has-certificate');
+        if (hasCert) hasCert.checked = (lesson.HasCertificate === true || lesson.HasCertificate === 'TRUE' || String(lesson.HasCertificate).toLowerCase() === 'true');
+        
         const isCatFeat = document.getElementById('lesson-is-category-featured');
         const catFeatOrder = document.getElementById('lesson-category-featured-order');
         const catFeatContainer = document.getElementById('cat-feat-order-container');
@@ -404,6 +406,9 @@ function openLessonModal(lessonId) {
         const isFeat = document.getElementById('lesson-is-featured');
         if (isFeat) isFeat.checked = false; 
         
+        const hasCert = document.getElementById('lesson-has-certificate');
+        if (hasCert) hasCert.checked = true;
+        
         const isCatFeat = document.getElementById('lesson-is-category-featured');
         const catFeatOrder = document.getElementById('lesson-category-featured-order');
         const catFeatContainer = document.getElementById('cat-feat-order-container');
@@ -441,8 +446,8 @@ function saveLesson(e) {
     saveBtn.innerHTML = 'กำลังบันทึก...';
 
     const isFeaturedEl = document.getElementById('lesson-is-featured');
+    const hasCertEl = document.getElementById('lesson-has-certificate');
     
-    // JAVIS ADDED: ดึงค่าตัวเลขแนะนำประจำหมวด
     const isCatFeaturedEl = document.getElementById('lesson-is-category-featured');
     const catFeatOrderEl = document.getElementById('lesson-category-featured-order');
     let categoryFeaturedValue = '0';
@@ -458,6 +463,7 @@ function saveLesson(e) {
         Category: document.getElementById('lesson-category').value,
         IsActive: document.getElementById('lesson-is-active').checked,
         IsFeatured: isFeaturedEl ? isFeaturedEl.checked : false, 
+        HasCertificate: hasCertEl ? hasCertEl.checked : false,
         IsCategoryFeatured: categoryFeaturedValue, 
         TargetDepartments: window.currentDeptTags ? window.currentDeptTags.join(', ') : '',
         TargetPositions: window.currentPosTags ? window.currentPosTags.join(', ') : '',
@@ -557,7 +563,6 @@ function renderSectionsList() {
 
     const dragIcon = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"></path></svg>';
 
-    // JAVIS ADDED: เพิ่ม ID sections-sortable-container ให้คอลัมน์เนื้อหาย่อย
     let html = '<div class="space-y-3" id="sections-sortable-container">';
     lessonSections.forEach(function(sec) {
         const vp = sec.VideoPoints !== undefined ? sec.VideoPoints : 10;
@@ -589,7 +594,6 @@ function renderSectionsList() {
     html += '</div>';
     container.innerHTML = html;
 
-    // JAVIS ADDED: ผูกระบบลากและวาง (SortableJS) ให้กับคอลัมน์เนื้อหาย่อย
     const sortableContainer = document.getElementById('sections-sortable-container');
     if (sortableContainer && typeof Sortable !== 'undefined') {
         if (window.sectionSortable) { window.sectionSortable.destroy(); }
@@ -1011,7 +1015,6 @@ function showCourseLearners(lessonId) {
     }
     const lesson = lessons.find(function(l) { return l.LessonID === lessonId; });
     
-    // JAVIS FIX: อัปเดตข้อความพร้อมแสดงชื่อคอร์ส
     const titleEl = document.getElementById('course-learners-title');
     if(titleEl) titleEl.textContent = 'ผู้เรียน: ' + (lesson ? lesson.Title : '');
     
