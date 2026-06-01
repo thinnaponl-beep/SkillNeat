@@ -133,11 +133,22 @@ function renderUsersList() {
 
 function openUserCourseHistory(email) {
     if (typeof dashboardDataList === 'undefined' || dashboardDataList.length === 0) {
-        showAdminToast('กำลังอัปเดตข้อมูลผู้เรียน กรุณารอสักครู่...', 'warning');
-        if(typeof loadDashboardData === 'function') loadDashboardData();
-        setTimeout(function() {
-            if(typeof showUserDetails === 'function') showUserDetails(email);
-        }, 1500);
+        showAdminToast('กำลังดึงข้อมูลประวัติการเรียน กรุณารอสักครู่...', 'warning');
+        
+        // JAVIS FIX: รอให้โหลดข้อมูลเสร็จ 100% แล้วค่อยเปิด Popup แทนการใช้ setTimeout
+        const periodSelect = document.getElementById('dashboard-period-filter');
+        const periodVal = periodSelect ? periodSelect.value : 'all';
+        
+        google.script.run
+            .withSuccessHandler(function(res) {
+                let parsed = res;
+                if(typeof res === 'string') try { parsed = JSON.parse(res); } catch(e){}
+                if(parsed && parsed.students) { 
+                    dashboardDataList = parsed.students; 
+                    if(typeof showUserDetails === 'function') showUserDetails(email);
+                }
+            })
+            .getDashboardStats(periodVal);
     } else {
         if(typeof showUserDetails === 'function') showUserDetails(email);
     }
