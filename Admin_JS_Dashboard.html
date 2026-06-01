@@ -15,7 +15,7 @@ function initDashboardPeriodFilter() {
     const thaiMonths = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
     const d = new Date();
 
-for (let i = 5; i >= 0; i--) {
+    for (let i = 5; i >= 0; i--) {
         const currentMonth = new Date(d.getFullYear(), d.getMonth() - i, 1);
         const yearStr = currentMonth.getFullYear();
         const monthStr = String(currentMonth.getMonth() + 1).padStart(2, '0');
@@ -30,8 +30,8 @@ for (let i = 5; i >= 0; i--) {
         option.value = val;
         option.textContent = label;
         selector.insertBefore(option, selector.children[1]); 
-       }
-      const currentMonthVal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    }
+    const currentMonthVal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     selector.value = currentMonthVal;
     
     isPeriodFilterInitialized = true;
@@ -39,23 +39,20 @@ for (let i = 5; i >= 0; i--) {
 
 function getRankName(score) {
     const numScore = parseInt(score) || 0;
-    if (numScore >= 1000) return 'Master (ปรมาจารย์)';
-    if (numScore >= 600) return 'Expert (ผู้เชี่ยวชาญ)';
-    if (numScore >= 300) return 'Scholar (ผู้ใฝ่รู้)';
-    if (numScore >= 100) return 'Explorer (นักสำรวจ)';
-    return 'Novice (ผู้เริ่มต้น)';
+    if (numScore >= 10000) return 'Diamond (ปรมาจารย์)';
+    if (numScore >= 5000) return 'Platinum (ผู้เชี่ยวชาญ)';
+    if (numScore >= 2500) return 'Gold (ผู้ใฝ่รู้)';
+    if (numScore >= 1000) return 'Silver (นักสำรวจ)';
+    return 'Bronze (ผู้เริ่มต้น)';
 }
 
-
 function loadDashboardData() {
-    initDashboardPeriodFilter(); // สร้าง dropdown ตัวเลือกเดือนก่อนทำงาน
+    initDashboardPeriodFilter(); 
     
     const tbody = document.getElementById('dashboard-table-body');
     const selector = document.getElementById('dashboard-period-filter');
-    // ดึงค่าเดือนที่เลือก ถ้าไม่มีให้ใช้ 'all'
     currentAdminDashView = selector ? selector.value : 'all';
 
-    // อัปเดต Title ให้ตรงกับเดือนที่เลือก
     const titleH3 = document.getElementById('dashboard-leaderboard-title');
     if (titleH3 && selector && selector.selectedIndex > -1) {
         const labelText = selector.options[selector.selectedIndex].text;
@@ -89,10 +86,10 @@ function loadDashboardData() {
         .withFailureHandler(function(err) {
             console.error("Dashboard Error:", err);
             if(typeof showAdminToast === 'function') showAdminToast("เกิดข้อผิดพลาดในการดึงข้อมูลจาก Code.gs", "error");
-            if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-red-500">เกิดข้อผิดพลาด: ' + escapeHtml(err.message || err) + '<br><span class="text-xs text-slate-500">โปรดตรวจสอบว่าได้อัปเดตไฟล์ Code.gs ครบถ้วนแล้ว (ตรวจสอบฟังก์ชัน getDashboardStats และ isDateInPeriod)</span></td></tr>';
+            if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-red-500">เกิดข้อผิดพลาด: ' + escapeHtml(err.message || err) + '<br><span class="text-xs text-slate-500">โปรดตรวจสอบว่าได้อัปเดตไฟล์ Code.gs ครบถ้วนแล้ว</span></td></tr>';
             if (lbContainer) lbContainer.innerHTML = '<div class="col-span-3 text-center text-red-500 py-8">โหลดข้อมูลล้มเหลว โปรดตรวจสอบ Code.gs</div>';
         })
-        .getDashboardStats(currentAdminDashView); // ส่งเดือนที่เลือกไปประมวลผลที่ Backend เลย
+        .getDashboardStats(currentAdminDashView); 
 }
 
 function processDashboardData(data) {
@@ -113,14 +110,12 @@ function processDashboardData(data) {
         totalUsersCount = studentsList.length;
     } else if (data && Array.isArray(data.students)) {
         studentsList = data.students; 
-        // อ้างอิงจาก length เพราะเรากรองจาก backend มาแล้ว
         totalUsersCount = data.totalStudents || (typeof users !== 'undefined' ? users.length : studentsList.length);
         totalLessonsCount = data.totalLessons || 0;
     }
 
     dashboardDataList = studentsList;
 
-    // อัปเดตตัวเลขแสดงผล
     const eleTotalUsers = document.getElementById('dash-total-users');
     const eleActiveUsers = document.getElementById('dash-active-users');
     const eleTotalCourses = document.getElementById('dash-total-courses');
@@ -138,6 +133,8 @@ function processDashboardData(data) {
         
         if(typeof renderPendingProofs === 'function') renderPendingProofs([]);
         renderLeaderboard([]);
+        if (typeof renderPopularCourses === 'function') renderPopularCourses();
+        if (typeof renderDailyActivity === 'function' && data.dailyActivity) renderDailyActivity(data.dailyActivity);
         return; 
     }
 
@@ -161,11 +158,16 @@ function processDashboardData(data) {
     const pText = document.getElementById('dash-avg-progress-text');
     if(pText) pText.innerText = avgProgress + '%';
 
-    // Sort ด้วย totalBN อย่างเดียว (เพราะ Backend กรองคะแนนตามเดือนมาให้แล้ว)
     const sortedUsers = [...dashboardDataList].sort(function(a, b) { return (b.totalBN || 0) - (a.totalBN || 0); });
     
     renderLeaderboard(sortedUsers);
     renderDashboardTable(sortedUsers);
+    
+    if (typeof renderPopularCourses === 'function') renderPopularCourses();
+
+    if (typeof renderDailyActivity === 'function' && data.dailyActivity) {
+        renderDailyActivity(data.dailyActivity);
+    }
 }
 
 function renderLeaderboard(sortedUsers) {
@@ -315,9 +317,187 @@ function renderDashboardTable(users) {
     if(tbody) tbody.innerHTML = html;
 }
 
+function renderPopularCourses() {
+    const container = document.getElementById('dashboard-popular-courses-list');
+    if (!container || typeof lessons === 'undefined' || typeof sections === 'undefined' || !dashboardDataList) return;
+
+    const courseStats = {};
+    
+    // ตั้งต้นโครงสร้างข้อมูลแต่ละคอร์ส
+    lessons.forEach(function(l) {
+        if (l.IsActive) {
+            courseStats[l.LessonID] = {
+                id: l.LessonID,
+                title: l.Title,
+                category: l.Category || l.MainCategory || 'ทั่วไป',
+                learners: new Set(),
+                totalViews: 0,
+                sectionCount: sections.filter(function(s) { return s.LessonID === l.LessonID; }).length
+            };
+        }
+    });
+
+    // วนลูปนับข้อมูลจากผู้เรียนทั้งหมด
+    dashboardDataList.forEach(function(user) {
+        if (user.completedSections && user.completedSections.length > 0) {
+            user.completedSections.forEach(function(secId) {
+                const sec = sections.find(function(s) { return s.SectionID === secId; });
+                if (sec && courseStats[sec.LessonID]) {
+                    courseStats[sec.LessonID].learners.add(user.email);
+                    courseStats[sec.LessonID].totalViews += 1;
+                }
+            });
+        }
+        if (user.scores) {
+            Object.keys(user.scores).forEach(function(secId) {
+                const sec = sections.find(function(s) { return s.SectionID === secId; });
+                if (sec && courseStats[sec.LessonID]) {
+                    courseStats[sec.LessonID].learners.add(user.email);
+                }
+            });
+        }
+        if (user.externalProofs && user.externalProofs.length > 0) {
+            user.externalProofs.forEach(function(proof) {
+                const sec = sections.find(function(s) { return s.SectionID === proof.SectionID; });
+                if (sec && courseStats[sec.LessonID]) {
+                    courseStats[sec.LessonID].learners.add(user.email);
+                }
+            });
+        }
+    });
+
+    // คัดกรองและเรียงลำดับจากคนเรียนมากสุดไปน้อยสุด
+    const sortedCourses = Object.values(courseStats)
+        .map(function(c) {
+            return {
+                id: c.id,
+                title: c.title,
+                category: c.category,
+                learnerCount: c.learners.size,
+                totalViews: c.totalViews,
+                sectionCount: c.sectionCount
+            };
+        })
+        .filter(function(c) { return c.learnerCount > 0; }) 
+        .sort(function(a, b) { 
+            if (b.learnerCount !== a.learnerCount) return b.learnerCount - a.learnerCount;
+            return b.totalViews - a.totalViews;
+        });
+
+    if (sortedCourses.length === 0) {
+        container.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-slate-500">ยังไม่มีข้อมูลการเข้าเรียนคอร์สต่างๆ ในขณะนี้</td></tr>';
+        return;
+    }
+
+    let html = '';
+    sortedCourses.slice(0, 10).forEach(function(course, index) { 
+        let rankBadge = '<span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-100 text-slate-500 font-bold text-xs">' + (index + 1) + '</span>';
+        if(index === 0) rankBadge = '<span class="text-xl drop-shadow-sm" title="อันดับ 1">🥇</span>';
+        else if(index === 1) rankBadge = '<span class="text-xl drop-shadow-sm" title="อันดับ 2">🥈</span>';
+        else if(index === 2) rankBadge = '<span class="text-xl drop-shadow-sm" title="อันดับ 3">🥉</span>';
+        
+        let catText = course.category;
+        if(catText.includes('|')) catText = catText.split('|')[1]; // ตัดเอาเฉพาะชื่อหมวดหมู่ย่อย
+
+        html += '<tr class="hover:bg-[#31c1d7]/5 transition-colors group cursor-pointer" onclick="showCourseLearners(\'' + escapeJsString(course.id) + '\')" title="คลิกเพื่อดูผู้เรียนคอร์สนี้">' +
+            '<td class="p-4 text-center">' + rankBadge + '</td>' +
+            '<td class="p-4 font-bold text-slate-800 group-hover:text-[#31c1d7] transition-colors">' + escapeHtml(course.title) + '</td>' +
+            '<td class="p-4"><span class="px-2 py-1 bg-slate-100 rounded-lg text-[10px] font-bold border border-slate-200 text-slate-600">' + escapeHtml(catText) + '</span></td>' +
+            '<td class="p-4 text-center font-black text-[#31c1d7] text-base">' + new Intl.NumberFormat().format(course.learnerCount) + '</td>' +
+            '<td class="p-4 text-center text-sm font-bold text-slate-500">' + course.sectionCount + '</td>' +
+            '<td class="p-4 text-center text-sm text-slate-500">' + new Intl.NumberFormat().format(course.totalViews) + '</td>' +
+        '</tr>';
+    });
+
+    container.innerHTML = html;
+}
+
+function renderDailyActivity(dailyActivity) {
+    let container = document.getElementById('dashboard-daily-activity-container');
+    
+    if (!container) {
+        const dashboardContent = document.getElementById('dashboard-content');
+        if (!dashboardContent) return;
+        
+        const sectionHtml = '<div class="mt-10 mb-4 flex items-center gap-2 pl-2">' +
+            '<span class="text-2xl">📅</span>' +
+            '<div>' +
+                '<h3 class="text-lg font-bold text-slate-800">จำนวนผู้เข้าเรียนรายวัน (Daily Active Learners)</h3>' +
+                '<p class="text-sm text-slate-500 mt-0.5">ตัดรอบวันทุกๆ 18:00 น. (เพื่อรวบรวมข้อมูลการเรียนหลังเลิกงานเข้ากับวันก่อนหน้า)</p>' +
+            '</div>' +
+        '</div>' +
+        '<div class="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden mb-8" id="dashboard-daily-activity-container">' +
+            '<div class="w-full overflow-x-auto custom-scrollbar">' +
+                '<table class="w-full text-left border-collapse whitespace-nowrap">' +
+                    '<thead>' +
+                        '<tr class="bg-slate-50/80 text-slate-600 text-sm border-b border-slate-200">' +
+                            '<th class="p-4 font-bold">วันที่ (หลังตัดรอบ 18:00)</th>' +
+                            '<th class="p-4 font-bold text-center w-48">จำนวนผู้เข้าเรียน (คน)</th>' +
+                            '<th class="p-4 font-bold w-1/2">กราฟสัดส่วน</th>' +
+                        '</tr>' +
+                    '</thead>' +
+                    '<tbody id="dashboard-daily-activity-list" class="text-sm text-slate-700 divide-y divide-slate-100">' +
+                    '</tbody>' +
+                '</table>' +
+            '</div>' +
+        '</div>';
+        
+        dashboardContent.insertAdjacentHTML('beforeend', sectionHtml);
+        container = document.getElementById('dashboard-daily-activity-list');
+    } else {
+        container = document.getElementById('dashboard-daily-activity-list');
+    }
+
+    if (!container || !dailyActivity || dailyActivity.length === 0) {
+        if(container) container.innerHTML = '<tr><td colspan="3" class="p-8 text-center text-slate-500">ไม่มีข้อมูลการเข้าเรียนในช่วงเวลานี้</td></tr>';
+        return;
+    }
+
+    const maxUsers = Math.max(...dailyActivity.map(d => d.userCount));
+    const thaiMonths = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+
+    let html = '';
+    // แสดงเฉพาะ 14 วันล่าสุด เพื่อไม่ให้ตารางยาวเกินไป
+    dailyActivity.slice(0, 14).forEach(function(day) {
+        const parts = day.date.split('-');
+        let displayDate = day.date;
+        if (parts.length === 3) {
+            const y = parseInt(parts[0]) + 543;
+            const m = parseInt(parts[1]) - 1;
+            const d = parseInt(parts[2]);
+            displayDate = d + ' ' + thaiMonths[m] + ' ' + y;
+        }
+
+        const percent = maxUsers > 0 ? Math.round((day.userCount / maxUsers) * 100) : 0;
+        let barColor = 'bg-blue-400';
+        if (percent > 80) barColor = 'bg-emerald-500';
+        else if (percent > 40) barColor = 'bg-[#31c1d7]';
+
+        html += '<tr class="hover:bg-slate-50/50 transition-colors">' +
+            '<td class="p-4 font-bold text-slate-700">' + escapeHtml(displayDate) + '</td>' +
+            '<td class="p-4 text-center font-black text-[#31c1d7] text-base">' + new Intl.NumberFormat().format(day.userCount) + '</td>' +
+            '<td class="p-4">' +
+                '<div class="flex items-center gap-2">' +
+                    '<div class="w-full bg-slate-100 rounded-full h-3 max-w-md">' +
+                        '<div class="' + barColor + ' h-3 rounded-full transition-all duration-1000" style="width: ' + percent + '%"></div>' +
+                    '</div>' +
+                '</div>' +
+            '</td>' +
+        '</tr>';
+    });
+
+    container.innerHTML = html;
+}
+
+// JAVIS REFACTORED: จัดการดึงข้อมูลสร้าง Array ก่อนแล้วค่อยเรียงลำดับ (Sorting) วันที่ให้ใหม่ล่าสุดอยู่บนเสมอ
 function showUserDetails(email) {
-    const user = dashboardDataList.find(function(u) { return u.email === email; });
-    if (!user) return;
+    const targetEmail = String(email).trim().toLowerCase();
+    const user = dashboardDataList.find(function(u) { return String(u.email).trim().toLowerCase() === targetEmail; });
+    
+    if (!user) {
+        if(typeof showAdminToast === 'function') showAdminToast('ยังไม่มีประวัติการเรียนสำหรับพนักงานนี้', 'info');
+        return;
+    }
 
     document.getElementById('user-details-title').textContent = 'ประวัติการเรียนของ: ' + (user.fullName || user.email);
     const container = document.getElementById('user-details-content');
@@ -328,7 +508,8 @@ function showUserDetails(email) {
         return;
     }
 
-    let html = '<div class="space-y-4">';
+    let displayLessons = []; 
+
     if (typeof lessons !== 'undefined') {
         lessons.forEach(function(lesson) {
             const lessonSections = (typeof sections !== 'undefined') ? sections.filter(function(s) { return s.LessonID === lesson.LessonID; }) : [];
@@ -338,30 +519,54 @@ function showUserDetails(email) {
             let totalQuizScore = 0;
             let totalQuizCount = 0;
             let hasActivity = false;
+            let latestLessonTimestamp = null; 
+            let earnedBNInLesson = 0; // JAVIS ADDED: ตัวแปรเก็บคะแนนรวมของคอร์สนี้
 
             let sectionsHtml = '';
 
             lessonSections.forEach(function(sec) {
                 const isCompleted = user.completedSections && user.completedSections.includes(sec.SectionID);
-                if (isCompleted) completedCount++;
+                const vp = parseInt(sec.VideoPoints) || 10; // JAVIS ADDED
+                const qp = parseInt(sec.QuizPoints) || 50;  // JAVIS ADDED
+                
+                let currentSecTime = null; 
+                if (isCompleted) {
+                    completedCount++;
+                    earnedBNInLesson += vp; // JAVIS ADDED
+                    if (user.sectionTimestamps && user.sectionTimestamps[sec.SectionID]) {
+                        currentSecTime = new Date(user.sectionTimestamps[sec.SectionID]);
+                    }
+                }
 
                 if (user.scores && user.scores[sec.SectionID] !== undefined) {
                     totalQuizScore += user.scores[sec.SectionID];
                     totalQuizCount++;
                     hasActivity = true;
+                    
+                    if (user.scores[sec.SectionID] >= 0.5) earnedBNInLesson += qp; // JAVIS ADDED
+                    
+                    if (user.quizTimestamps && user.quizTimestamps[sec.SectionID]) {
+                        let qTime = new Date(user.quizTimestamps[sec.SectionID]);
+                        if (!currentSecTime || qTime > currentSecTime) currentSecTime = qTime;
+                    }
                 }
 
                 if (sec.ContentType === 'external') {
                     const proof = user.externalProofs ? user.externalProofs.find(function(p) { return p.SectionID === sec.SectionID; }) : null;
                     if (proof) {
                         hasActivity = true;
+                        if (proof.Timestamp) {
+                            let pTime = new Date(proof.Timestamp);
+                            if (!currentSecTime || pTime > currentSecTime) currentSecTime = pTime;
+                        }
+                        
                         let statusBadge = '';
                         let actionBtns = '';
                         
                         if (proof.Status === 'Pending') {
                             statusBadge = '<span class="text-amber-500 bg-amber-50 px-2 py-0.5 rounded text-[10px] font-bold border border-amber-100">⏳ รอตรวจ</span>';
-                            actionBtns = '<button onclick="updateProofStatus(\'' + escapeJsString(email) + '\', \'' + escapeJsString(sec.SectionID) + '\', \'Approved\')" class="px-2 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded text-[10px] font-bold transition">อนุมัติ</button>' +
-                                         '<button onclick="updateProofStatus(\'' + escapeJsString(email) + '\', \'' + escapeJsString(sec.SectionID) + '\', \'Rejected\')" class="px-2 py-1 bg-rose-500 hover:bg-rose-600 text-white rounded text-[10px] font-bold transition">ปฏิเสธ</button>';
+                            actionBtns = '<button onclick="updateProofStatus(\'' + escapeJsString(user.email) + '\', \'' + escapeJsString(sec.SectionID) + '\', \'Approved\')" class="px-2 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded text-[10px] font-bold transition">อนุมัติ</button>' +
+                                         '<button onclick="updateProofStatus(\'' + escapeJsString(user.email) + '\', \'' + escapeJsString(sec.SectionID) + '\', \'Rejected\')" class="px-2 py-1 bg-rose-500 hover:bg-rose-600 text-white rounded text-[10px] font-bold transition">ปฏิเสธ</button>';
                         } else if (proof.Status === 'Approved') {
                             statusBadge = '<span class="text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded text-[10px] font-bold border border-emerald-100">✅ อนุมัติแล้ว</span>';
                         } else {
@@ -378,6 +583,12 @@ function showUserDetails(email) {
                         '</div>';
                     }
                 }
+
+                if (currentSecTime && !isNaN(currentSecTime.getTime())) {
+                    if (!latestLessonTimestamp || currentSecTime > latestLessonTimestamp) {
+                        latestLessonTimestamp = currentSecTime;
+                    }
+                }
             });
 
             if (completedCount > 0 || hasActivity) {
@@ -385,23 +596,65 @@ function showUserDetails(email) {
                 const avgScore = totalQuizCount > 0 ? Math.round((totalQuizScore / totalQuizCount) * 100) : 0;
                 const isCourseCompleted = progress === 100;
 
-                html += '<div class="bg-white p-4 rounded-2xl border ' + (isCourseCompleted ? 'border-emerald-200 shadow-sm' : 'border-slate-200 hover:border-[#31c1d7]/30') + ' transition-all">' +
-                    '<div class="flex justify-between items-start mb-2">' +
-                        '<h4 class="font-bold text-slate-800 text-sm">' + escapeHtml(lesson.Title) + '</h4>' +
-                        (isCourseCompleted ? '<span class="px-2 py-1 bg-emerald-100 text-emerald-600 text-[10px] font-bold rounded-lg flex-shrink-0 ml-2">เรียนจบแล้ว</span>' : '<span class="px-2 py-1 bg-[#31c1d7]/10 text-[#31c1d7] text-[10px] font-bold rounded-lg flex-shrink-0 ml-2">กำลังเรียน</span>') +
-                    '</div>' +
-                    '<div class="flex items-center gap-4 text-sm mt-3">' +
-                        '<div class="flex-grow">' +
-                            '<div class="flex justify-between text-[11px] font-bold text-slate-500 mb-1"><span>ความคืบหน้า (' + completedCount + '/' + lessonSections.length + ' ตอน)</span><span class="' + (isCourseCompleted ? 'text-emerald-500' : 'text-[#31c1d7]') + '">' + progress + '%</span></div>' +
-                            '<div class="w-full bg-slate-100 rounded-full h-1.5"><div class="' + (isCourseCompleted ? 'bg-emerald-500' : 'bg-[#31c1d7]') + ' h-1.5 rounded-full" style="width: ' + progress + '%"></div></div>' +
-                        '</div>' +
-                        (totalQuizCount > 0 ? '<div class="flex-shrink-0 text-center pl-4 border-l border-slate-100"><div class="text-[10px] font-bold text-slate-400">คะแนนสอบ</div><div class="font-black text-violet-600 text-lg">' + avgScore + '%</div></div>' : '') +
-                    '</div>' +
-                    sectionsHtml +
-                '</div>';
+                displayLessons.push({
+                    lesson: lesson,
+                    progress: progress,
+                    avgScore: avgScore,
+                    isCourseCompleted: isCourseCompleted,
+                    latestTimestamp: latestLessonTimestamp, 
+                    sectionsHtml: sectionsHtml,
+                    completedCount: completedCount,
+                    totalSections: lessonSections.length,
+                    earnedBN: earnedBNInLesson // JAVIS ADDED
+                });
             }
         });
     }
+
+    // JAVIS FIX: เรียงลำดับจากอัปเดตล่าสุดไปเก่าสุด
+    displayLessons.sort(function(a, b) {
+        if (a.latestTimestamp && b.latestTimestamp) {
+            return b.latestTimestamp - a.latestTimestamp;
+        }
+        if (a.latestTimestamp) return -1;
+        if (b.latestTimestamp) return 1;
+        return 0;
+    });
+
+    let html = '<div class="space-y-4">';
+    displayLessons.forEach(function(data) {
+        let dateHtml = '';
+        if (data.latestTimestamp) {
+            let timeLabel = data.isCourseCompleted ? 'เรียนจบเมื่อ:' : 'อัปเดตล่าสุด:';
+            dateHtml = '<div class="text-[11px] text-slate-500 mt-1 font-medium flex items-center gap-1.5"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>' + timeLabel + ' ' + data.latestTimestamp.toLocaleDateString('th-TH') + ' ' + data.latestTimestamp.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'}) + ' น.</div>';
+        }
+
+        // JAVIS ADDED: แสดงคะแนนที่ได้จากคอร์สนี้
+        let bnBadgeHtml = '';
+        if (data.earnedBN > 0) {
+             bnBadgeHtml = '<span class="px-2.5 py-1 bg-amber-50 border border-amber-200 text-amber-600 text-[10px] font-bold rounded-lg flex-shrink-0 mt-0.5 flex items-center gap-1"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 01.894 1.79l-1.233.616 1.738 5.42a1 1 0 01-.285 1.05A3.989 3.989 0 0115 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.715-5.349L11 6.477V16h2a1 1 0 110 2H7a1 1 0 110-2h2V6.477L6.237 7.582l1.715 5.349a1 1 0 01-.285 1.05A3.989 3.989 0 015 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.738-5.42-1.233-.617a1 1 0 01.894-1.788l1.599.799L9 4.323V3a1 1 0 011-1z" clip-rule="evenodd"></path></svg> +' + new Intl.NumberFormat().format(data.earnedBN) + ' BN</span>';
+        }
+
+        let statusBadge = data.isCourseCompleted ? '<span class="px-2 py-1 bg-emerald-100 text-emerald-600 text-[10px] font-bold rounded-lg flex-shrink-0 mt-0.5">เรียนจบแล้ว</span>' : '<span class="px-2 py-1 bg-[#31c1d7]/10 text-[#31c1d7] text-[10px] font-bold rounded-lg flex-shrink-0 mt-0.5">กำลังเรียน</span>';
+
+        html += '<div class="bg-white p-4 rounded-2xl border ' + (data.isCourseCompleted ? 'border-emerald-200 shadow-sm' : 'border-slate-200 hover:border-[#31c1d7]/30') + ' transition-all">' +
+            '<div class="flex justify-between items-start mb-2">' +
+                '<div>' +
+                    '<h4 class="font-bold text-slate-800 text-sm">' + escapeHtml(data.lesson.Title) + '</h4>' +
+                    dateHtml + 
+                '</div>' +
+                '<div class="flex items-center gap-2 flex-wrap justify-end">' + bnBadgeHtml + statusBadge + '</div>' + 
+            '</div>' +
+            '<div class="flex items-center gap-4 text-sm mt-3">' +
+                '<div class="flex-grow">' +
+                    '<div class="flex justify-between text-[11px] font-bold text-slate-500 mb-1"><span>ความคืบหน้า (' + data.completedCount + '/' + data.totalSections + ' ตอน)</span><span class="' + (data.isCourseCompleted ? 'text-emerald-500' : 'text-[#31c1d7]') + '">' + data.progress + '%</span></div>' +
+                    '<div class="w-full bg-slate-100 rounded-full h-1.5"><div class="' + (data.isCourseCompleted ? 'bg-emerald-500' : 'bg-[#31c1d7]') + ' h-1.5 rounded-full" style="width: ' + data.progress + '%"></div></div>' +
+                '</div>' +
+                (data.avgScore > 0 ? '<div class="flex-shrink-0 text-center pl-4 border-l border-slate-100"><div class="text-[10px] font-bold text-slate-400">คะแนนสอบ</div><div class="font-black text-violet-600 text-lg">' + data.avgScore + '%</div></div>' : '') +
+            '</div>' +
+            data.sectionsHtml +
+        '</div>';
+    });
     html += '</div>';
 
     container.innerHTML = html || '<div class="text-center p-8 text-slate-400">ยังไม่เริ่มเรียนคอร์สใดเลย</div>';
@@ -489,20 +742,42 @@ function showCourseLearners(lessonId) {
     const learners = [];
     dashboardDataList.forEach(function(user) {
         let completedCount = 0;
+        let latestTime = null; 
         lessonSections.forEach(function(secId) {
             if (user.completedSections && user.completedSections.includes(secId)) {
                 completedCount++;
+                if (user.sectionTimestamps && user.sectionTimestamps[secId]) {
+                    let st = new Date(user.sectionTimestamps[secId]);
+                    if (!latestTime || st > latestTime) latestTime = st;
+                }
+            }
+            if (user.quizTimestamps && user.quizTimestamps[secId]) {
+                let qt = new Date(user.quizTimestamps[secId]);
+                if (!latestTime || qt > latestTime) latestTime = qt;
+            }
+            if (user.externalProofs) {
+                let proof = user.externalProofs.find(p => p.SectionID === secId);
+                if (proof && proof.Timestamp) {
+                    let pt = new Date(proof.Timestamp);
+                    if (!latestTime || pt > latestTime) latestTime = pt;
+                }
             }
         });
-        if (completedCount > 0) {
+        
+        if (completedCount > 0 || latestTime) {
             learners.push({
                 user: user,
-                progress: Math.round((completedCount / lessonSections.length) * 100)
+                progress: Math.round((completedCount / lessonSections.length) * 100),
+                latestTime: latestTime 
             });
         }
     });
 
-    learners.sort(function(a, b) { return b.progress - a.progress; });
+    learners.sort(function(a, b) { 
+        if (b.progress !== a.progress) return b.progress - a.progress; 
+        if (b.latestTime && a.latestTime) return b.latestTime - a.latestTime;
+        return 0;
+    });
 
     if (learners.length === 0) {
         container.innerHTML = '<div class="text-center p-8 text-slate-400">ยังไม่มีพนักงานเริ่มเรียนคอร์สนี้ครับ</div>';
@@ -516,12 +791,19 @@ function showCourseLearners(lessonId) {
         const isCompleted = data.progress === 100;
         const img = u.profileImage || 'https://ui-avatars.com/api/?name='+encodeURIComponent(u.fullName || u.email)+'&background=31c1d7&color=fff';
         
+        let dateStr = '';
+        if (data.latestTime) {
+            let timeLabel = isCompleted ? 'เรียนจบ: ' : 'อัปเดต: ';
+            dateStr = '<div class="text-[10px] text-slate-400 mt-1 flex items-center gap-1"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> ' + timeLabel + data.latestTime.toLocaleDateString('th-TH') + ' ' + data.latestTime.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'}) + ' น.</div>';
+        }
+
         html += '<div class="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-shadow">' +
             '<div class="flex items-center gap-3">' +
                 '<img src="' + escapeHtml(img) + '" class="w-10 h-10 rounded-full object-cover border border-slate-200">' +
                 '<div>' +
                     '<h4 class="text-sm font-bold text-slate-800">' + escapeHtml(u.fullName || u.email) + '</h4>' +
                     '<p class="text-[11px] text-slate-500">' + escapeHtml(u.department || 'General') + '</p>' +
+                    dateStr + 
                 '</div>' +
             '</div>' +
             '<div class="text-right">' +
