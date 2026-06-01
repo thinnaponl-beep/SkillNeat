@@ -199,7 +199,6 @@
   window.initialCalcDone = false;
 
   // --- ลอจิกการคำนวณ 5 ระดับ (Rank) ---
-  // --- ลอจิกการคำนวณ 5 ระดับ (Rank) ---
   function getUserRank(bn) {
       if (bn >= 10000) return { name: 'SkillNeat Diamond Learners', th: 'ปรมาจารย์', icon: '👑', color: 'text-amber-500', bg: 'bg-amber-50', border: 'border-amber-200', next: null, min: 10000 };
       if (bn >= 5000) return { name: 'SkillNeat Platinum Learners', th: 'ผู้เชี่ยวชาญ', icon: '💎', color: 'text-indigo-500', bg: 'bg-indigo-50', border: 'border-indigo-200', next: 10000, min: 5000 };
@@ -225,16 +224,10 @@
               }
           }
           
-          if (serverUserProfile && serverUserProfile.TotalBN !== undefined && serverUserProfile.TotalBN !== '') {
-              window.currentTotalBN = parseInt(serverUserProfile.TotalBN) || 0;
-          } 
-          else if (data && data.userInfo && data.userInfo.profile && data.userInfo.profile.TotalBN !== undefined && data.userInfo.profile.TotalBN !== '') {
-              window.currentTotalBN = parseInt(data.userInfo.profile.TotalBN) || 0;
-          } 
-          else if (data && data.userInfo && data.userInfo.totalBN !== undefined) {
+          // JAVIS FIX: บังคับให้ใช้คะแนนที่คำนวณสดใหม่จาก Backend เท่านั้น (ลบการอ้างอิง UserProfile เก่าทิ้ง)
+          if (data && data.userInfo && data.userInfo.totalBN !== undefined) {
               window.currentTotalBN = parseInt(data.userInfo.totalBN) || 0;
-          } 
-          else {
+          } else {
               window.currentTotalBN = 0;
           }
           
@@ -251,7 +244,7 @@
                   <span class="text-xl leading-none drop-shadow-sm">${rank.icon}</span>
                   <div class="flex flex-col justify-center">
                       <span class="text-[10px] font-black ${rank.color} uppercase tracking-wider leading-none">${rank.name}</span>
-                      <span class="text-[11px] font-bold text-slate-600 leading-none mt-1">${window.currentTotalBN} BN</span>
+                      <span class="text-[11px] font-bold text-slate-600 leading-none mt-1">${new Intl.NumberFormat().format(window.currentTotalBN)} BN</span>
                   </div>
               </a>
           `;
