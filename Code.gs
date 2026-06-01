@@ -208,21 +208,39 @@ function isDateInPeriod(dateObj, period) {
 function updateLatestTimestamp(data) {
   const { sectionId, timestamp } = data;
   const userEmail = Session.getActiveUser().getEmail().trim().toLowerCase();
-  if (!userEmail || !sectionId) return;
+  if (!userEmail || !sectionId) return { status: 'error', message: 'Missing Data' };
   try {
-    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(TIMESTAMPS_SHEET_NAME);
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    let sheet = ss.getSheetByName(TIMESTAMPS_SHEET_NAME);
+    
+    if (!sheet) {
+        sheet = ss.insertSheet(TIMESTAMPS_SHEET_NAME);
+        sheet.appendRow(['Email', 'SectionID', 'LatestTimestamp']);
+    }
+    
     const sheetData = sheet.getDataRange().getValues();
-    const headers = sheetData[0];
-    const emailCol = headers.indexOf('Email');
-    const sectionCol = headers.indexOf('SectionID');
-    const timestampCol = headers.indexOf('LatestTimestamp');
+    let headers = sheetData[0];
+    
+    if (!headers || headers.length === 0 || headers[0] === '') {
+        headers = ['Email', 'SectionID', 'LatestTimestamp'];
+        sheet.appendRow(headers);
+    }
+    
+    let emailCol = headers.indexOf('Email');
+    let sectionCol = headers.indexOf('SectionID');
+    let timestampCol = headers.indexOf('LatestTimestamp');
+    
+    if (emailCol === -1) { emailCol = headers.length; headers.push('Email'); sheet.getRange(1, emailCol + 1).setValue('Email'); }
+    if (sectionCol === -1) { sectionCol = headers.length; headers.push('SectionID'); sheet.getRange(1, sectionCol + 1).setValue('SectionID'); }
+    if (timestampCol === -1) { timestampCol = headers.length; headers.push('LatestTimestamp'); sheet.getRange(1, timestampCol + 1).setValue('LatestTimestamp'); }
+
     for (let i = 1; i < sheetData.length; i++) {
-      if (String(sheetData[i][emailCol]).trim().toLowerCase() === userEmail && sheetData[i][sectionCol] === sectionId) {
+      if (String(sheetData[i][emailCol]).trim().toLowerCase() === userEmail && String(sheetData[i][sectionCol]).trim() === String(sectionId).trim()) {
         sheet.getRange(i + 1, timestampCol + 1).setValue(timestamp);
         return { status: 'updated' };
       }
     }
-    sheet.appendRow([Session.getActiveUser().getEmail(), sectionId, timestamp]);
+    sheet.appendRow([userEmail, sectionId, timestamp]);
     return { status: 'created' };
   } catch (e) {
     return { status: 'error', message: e.toString() };
@@ -267,7 +285,8 @@ function getStudentData(userEmail) {
      if (found) userProfile = found;
   }
 
-  let totalBN = parseInt(userProfile.ManualBN) || 0;
+  // JAVIS FIX: คำนวณคะแนนใหม่ เริ่มจาก 0 เสมอ เพื่อให้อ่านประวัติการได้คะแนนจริงๆ ป้องกันการ Desync
+  let totalBN = 0; 
 
   const historyMap = {};
   function addHistory(dateStr, points) {
@@ -297,8 +316,9 @@ function getStudentData(userEmail) {
       historyMap[key].total += points;
   }
 
+  // JAVIS FIX: กรองเอาประวัติล่าสุดขึ้นมาก่อน ป้องกันการเรียนซ้ำแล้วโดนทับด้วย 0
   let studentEarnedSections = {};
-  rawProgress.forEach(p => {
+  rawProgress.sort((a, b) => new Date(b.Timestamp || 0) - new Date(a.Timestamp || 0)).forEach(p => {
       if (!studentEarnedSections[p.SectionID]) {
           studentEarnedSections[p.SectionID] = true;
           const sec = sections.find(s => s.SectionID === p.SectionID);
@@ -306,11 +326,12 @@ function getStudentData(userEmail) {
           if (!t && p.EarnedBN instanceof Date) t = p.EarnedBN; 
           let earned = (p.EarnedBN !== undefined && p.EarnedBN !== '' && !(p.EarnedBN instanceof Date)) ? parseInt(p.EarnedBN) : (sec && sec.VideoPoints !== undefined ? parseInt(sec.VideoPoints) : 10);
           addHistory(t, earned);
+          totalBN += earned;
       }
   });
 
   let studentPassedQuizzes = {};
-  const sortedScores = [...scores].sort((a, b) => new Date(a.Timestamp) - new Date(b.Timestamp));
+  const sortedScores = [...scores].sort((a, b) => new Date(b.Timestamp || 0) - new Date(a.Timestamp || 0));
   sortedScores.forEach(s => {
       if (!studentPassedQuizzes[s.SectionID]) {
           const percent = s.TotalQuestions > 0 ? (s.Score / s.TotalQuestions) : 0;
@@ -321,11 +342,17 @@ function getStudentData(userEmail) {
               if (!t && s.EarnedBN instanceof Date) t = s.EarnedBN;
               let earned = (s.EarnedBN !== undefined && s.EarnedBN !== '' && !(s.EarnedBN instanceof Date)) ? parseInt(s.EarnedBN) : (sec && sec.QuizPoints !== undefined ? parseInt(sec.QuizPoints) : 50);
               addHistory(t, earned);
+              totalBN += earned;
           }
       }
   });
 
-  manualLogs.forEach(m => { addHistory(m.Timestamp, parseInt(m.Points) || 0); });
+  // JAVIS FIX: ดึงคะแนนพิเศษมาจาก Manual Log ทั้งหมดโดยตรง
+  manualLogs.forEach(m => { 
+      let pts = parseInt(m.Points) || 0;
+      addHistory(m.Timestamp, pts); 
+      totalBN += pts; 
+  });
 
   const monthlyHistory = Object.keys(historyMap).map(k => {
       return { month: k, score: historyMap[k].total };
@@ -347,14 +374,6 @@ function getStudentData(userEmail) {
                                     .sort((a,b) => new Date(b.Timestamp) - new Date(a.Timestamp))[0];
         section.externalProof = proof || null;
 
-        if (progress.includes(section.SectionID)) {
-            let vp = parseInt(section.VideoPoints);
-            totalBN += isNaN(vp) ? 10 : vp;
-        }
-        if (section.quizScore && (section.quizScore.Score / section.quizScore.TotalQuestions) >= 0.5) {
-            let qp = parseInt(section.QuizPoints);
-            totalBN += isNaN(qp) ? 50 : qp;
-        }
         return section;
       });
     
@@ -463,7 +482,6 @@ function getPublicLeaderboard(period) {
   profiles.forEach(p => {
       const email = String(p.Email).trim().toLowerCase();
       let defaultImg = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(p.Nickname || p.FullName || email) + '&background=31c1d7&color=fff';
-      const baseManualBN = period === 'all' ? (parseInt(p.ManualBN) || 0) : 0;
 
       studentMap[email] = {
           email: email,
@@ -472,20 +490,21 @@ function getPublicLeaderboard(period) {
           img: p.ProfileImage || defaultImg,
           completedSections: [],
           scores: {},
-          totalBN: baseManualBN 
+          totalBN: 0 // JAVIS FIX: บังคับเริ่ม 0 เพื่อคำนวณจาก Log แทน Profile 
       };
   });
 
-  if (period !== 'all') {
-      manualLogs.forEach(m => {
-          const email = String(m.Email).trim().toLowerCase();
-          if (studentMap[email]) {
-              studentMap[email].totalBN += (parseInt(m.Points) || 0);
-          }
-      });
-  }
+  // JAVIS FIX: รวมคะแนนแมนวลสำหรับทุก Period (แก้บั๊กคนหายออกจากตารางสะสม)
+  manualLogs.forEach(m => {
+      const email = String(m.Email).trim().toLowerCase();
+      if (!studentMap[email]) {
+          studentMap[email] = { email: email, name: email.split('@')[0], dept: 'General', img: 'https://ui-avatars.com/api/?name='+email+'&background=31c1d7&color=fff', completedSections: [], scores: {}, totalBN: 0 };
+      }
+      studentMap[email].totalBN += (parseInt(m.Points) || 0);
+  });
 
-  usersProgress.forEach(p => {
+  // JAVIS FIX: เรียงให้ดึงข้อมูลล่าสุดเป็นตัวตั้งต้น (แก้ปัญหาคะแนนไม่อัปเดตเมื่อเรียนซ้ำ)
+  usersProgress.sort((a, b) => new Date(b.Timestamp || 0) - new Date(a.Timestamp || 0)).forEach(p => {
       const email = String(p.Email).trim().toLowerCase();
       if(!studentMap[email]) { 
           studentMap[email] = { email: email, name: email.split('@')[0], dept: 'General', img: 'https://ui-avatars.com/api/?name='+email+'&background=31c1d7&color=fff', completedSections: [], scores: {}, totalBN: 0 };
@@ -497,7 +516,7 @@ function getPublicLeaderboard(period) {
       }
   });
 
-  scores.forEach(s => {
+  scores.sort((a, b) => new Date(b.Timestamp || 0) - new Date(a.Timestamp || 0)).forEach(s => {
       const email = String(s.Email).trim().toLowerCase();
       if(!studentMap[email]) {
           studentMap[email] = { email: email, name: email.split('@')[0], dept: 'General', img: 'https://ui-avatars.com/api/?name='+email+'&background=31c1d7&color=fff', completedSections: [], scores: {}, totalBN: 0 };
@@ -786,6 +805,14 @@ function updateUserProfile(data) {
        sheet.getRange(1, jobCol + 1).setValue('JobTitle');
        headers.push('JobTitle');
     }
+
+    // JAVIS ADDED: เพิ่มคอลัมน์เก็บเวลาอัปเดตโปรไฟล์ล่าสุด
+    let lastUpdateCol = headers.indexOf('LastUpdate');
+    if (lastUpdateCol === -1) {
+       lastUpdateCol = headers.length;
+       sheet.getRange(1, lastUpdateCol + 1).setValue('LastUpdate');
+       headers.push('LastUpdate');
+    }
     
     let profileImageUrl = null;
 
@@ -813,6 +840,7 @@ function updateUserProfile(data) {
       if (profileImageUrl && imgCol > -1) {
         sheet.getRange(rowIndex, imgCol + 1).setValue(profileImageUrl);
       }
+      if (lastUpdateCol > -1) sheet.getRange(rowIndex, lastUpdateCol + 1).setValue(new Date()); // JAVIS ADDED
     } else {
       const newRow = new Array(headers.length).fill('');
       newRow[emailCol] = userEmail;
@@ -822,6 +850,7 @@ function updateUserProfile(data) {
       newRow[posCol] = 'พนักงาน';
       newRow[manualCol] = 0;
       newRow[jobCol] = data.jobTitle || '';
+      newRow[lastUpdateCol] = new Date(); // JAVIS ADDED
       if (profileImageUrl) newRow[imgCol] = profileImageUrl;
       sheet.appendRow(newRow);
     }
@@ -907,6 +936,14 @@ function saveLesson(data) {
       headers.push('IsCategoryFeatured');
     }
 
+    // JAVIS ADDED: เพิ่มคอลัมน์ HasCertificate ถ้ายังไม่มี
+    let certCol = headers.indexOf('HasCertificate');
+    if (certCol === -1) {
+      certCol = headers.length;
+      sheet.getRange(1, certCol + 1).setValue('HasCertificate');
+      headers.push('HasCertificate');
+    }
+
     const idCol = headers.indexOf('LessonID');
     const titleCol = headers.indexOf('Title');
     const descCol = headers.indexOf('Description');
@@ -935,6 +972,7 @@ function saveLesson(data) {
         if (activeCol > -1) sheet.getRange(rowIndex, activeCol + 1).setValue(data.IsActive);
         if (featCol > -1) sheet.getRange(rowIndex, featCol + 1).setValue(data.IsFeatured); 
         if (catFeatCol > -1) sheet.getRange(rowIndex, catFeatCol + 1).setValue(data.IsCategoryFeatured); 
+        if (certCol > -1) sheet.getRange(rowIndex, certCol + 1).setValue(data.HasCertificate !== undefined ? data.HasCertificate : true); // JAVIS ADDED
         if (categoryCol > -1) sheet.getRange(rowIndex, categoryCol + 1).setValue(data.Category);
         if (mainCatCol > -1) sheet.getRange(rowIndex, mainCatCol + 1).setValue(data.MainCategory); 
         if (targetDeptCol > -1) sheet.getRange(rowIndex, targetDeptCol + 1).setValue(data.TargetDepartments);
@@ -955,6 +993,7 @@ function saveLesson(data) {
       if (activeCol > -1) newRow[activeCol] = data.IsActive;
       if (featCol > -1) newRow[featCol] = data.IsFeatured; 
       if (catFeatCol > -1) newRow[catFeatCol] = data.IsCategoryFeatured;
+      if (certCol > -1) newRow[certCol] = (data.HasCertificate !== undefined ? data.HasCertificate : true); // JAVIS ADDED
       if (categoryCol > -1) newRow[categoryCol] = data.Category;
       if (mainCatCol > -1) newRow[mainCatCol] = data.MainCategory; 
       if (targetDeptCol > -1) newRow[targetDeptCol] = data.TargetDepartments;
@@ -1308,20 +1347,26 @@ function getDashboardStats(period) {
   const allExternalProofs = getSheetData(EXTERNAL_PROOFS_SHEET_NAME);
   const allManualLogs = getSheetData(MANUAL_SCORES_SHEET_NAME); 
 
+  let targetPeriod = period;
+  if (period === 'current_month') {
+      const d = new Date();
+      targetPeriod = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }
+
   const usersProgress = allUsersProgress.filter(p => {
       let t = p.Timestamp;
       if (!t && p.EarnedBN instanceof Date) t = p.EarnedBN;
-      return isDateInPeriod(t, period);
+      return isDateInPeriod(t, targetPeriod);
   });
   
   const scores = allScores.filter(s => {
       let t = s.Timestamp;
       if (!t && s.EarnedBN instanceof Date) t = s.EarnedBN;
-      return isDateInPeriod(t, period);
+      return isDateInPeriod(t, targetPeriod);
   });
   
-  const externalProofs = allExternalProofs.filter(p => isDateInPeriod(p.Timestamp, period));
-  const manualLogs = allManualLogs.filter(m => isDateInPeriod(m.Timestamp, period)); 
+  const externalProofs = allExternalProofs.filter(p => isDateInPeriod(p.Timestamp, targetPeriod));
+  const manualLogs = allManualLogs.filter(m => isDateInPeriod(m.Timestamp, targetPeriod)); 
 
   const activeLessonIds = lessons.map(l => l.LessonID);
   const activeSections = sections.filter(s => activeLessonIds.includes(s.LessonID));
@@ -1339,8 +1384,6 @@ function getDashboardStats(period) {
 
   profiles.forEach(p => {
       const email = String(p.Email).trim().toLowerCase();
-      const baseManualBN = period === 'all' ? (parseInt(p.ManualBN) || 0) : 0;
-      
       studentMap[email] = {
           email: email,
           fullName: p.FullName || email,
@@ -1350,29 +1393,32 @@ function getDashboardStats(period) {
           jobTitle: p.JobTitle || '', 
           profileImage: p.ProfileImage || '',
           completedSections: [],
+          sectionTimestamps: {}, // JAVIS ADDED: เก็บเวลาดูวิดีโอ
           scores: {},
-          manualBN: baseManualBN,
-          totalBN: baseManualBN,
-          lastActive: null,
+          quizTimestamps: {}, // JAVIS ADDED: เก็บเวลาสอบ
+          manualBN: 0, 
+          totalBN: 0,  
+          lastActive: p.LastUpdate ? new Date(p.LastUpdate) : null,
           externalProofs: externalProofs.filter(proof => String(proof.Email).trim().toLowerCase() === email)
       };
   });
 
-  if (period !== 'all') {
-      manualLogs.forEach(m => {
-          const email = String(m.Email).trim().toLowerCase();
-          if (studentMap[email]) {
-              const pts = parseInt(m.Points) || 0;
-              studentMap[email].manualBN += pts;
-              studentMap[email].totalBN += pts;
-          }
-      });
-  }
+  // JAVIS FIX: คำนวณคะแนน Manual ตรงๆ จากชีต Log ป้องกันบั๊กไม่อัปเดตเมื่อข้ามเดือน
+  manualLogs.forEach(m => {
+      const email = String(m.Email).trim().toLowerCase();
+      if (!studentMap[email]) {
+          studentMap[email] = { email: email, fullName: email, nickname: '-', department: '-', position: '-', jobTitle: '', profileImage: '', completedSections: [], scores: {}, manualBN: 0, totalBN: 0, lastActive: null, externalProofs: [] };
+      }
+      const pts = parseInt(m.Points) || 0;
+      studentMap[email].manualBN += pts;
+      studentMap[email].totalBN += pts;
+  });
 
-  usersProgress.forEach(p => {
+  // JAVIS FIX: เรียงให้ดึงข้อมูลล่าสุดขึ้นมาก่อน แก้ปัญหา 0 คะแนนทับคะแนนใหม่
+  usersProgress.sort((a, b) => new Date(b.Timestamp || 0) - new Date(a.Timestamp || 0)).forEach(p => {
       const email = String(p.Email).trim().toLowerCase();
       if(!studentMap[email]) {
-          studentMap[email] = { email: email, fullName: email, nickname: '-', department: '-', position: '-', jobTitle: '', profileImage: '', completedSections: [], scores: {}, manualBN: 0, totalBN: 0, lastActive: null, externalProofs: externalProofs.filter(proof => String(proof.Email).trim().toLowerCase() === email) };
+          studentMap[email] = { email: email, fullName: email, nickname: '-', department: '-', position: '-', jobTitle: '', profileImage: '', completedSections: [], sectionTimestamps: {}, scores: {}, quizTimestamps: {}, manualBN: 0, totalBN: 0, lastActive: null, externalProofs: externalProofs.filter(proof => String(proof.Email).trim().toLowerCase() === email) };
       }
       
       let t = p.Timestamp;
@@ -1380,6 +1426,7 @@ function getDashboardStats(period) {
 
       if (sectionMap[p.SectionID] && !studentMap[email].completedSections.includes(p.SectionID)) {
           studentMap[email].completedSections.push(p.SectionID);
+          studentMap[email].sectionTimestamps[p.SectionID] = t; // JAVIS ADDED
           let earned = (p.EarnedBN !== undefined && p.EarnedBN !== '' && !(p.EarnedBN instanceof Date)) ? parseInt(p.EarnedBN) : (sectionMap[p.SectionID] ? sectionMap[p.SectionID].vp : 0);
           studentMap[email].totalBN += earned; 
       }
@@ -1388,10 +1435,11 @@ function getDashboardStats(period) {
       }
   });
 
-  scores.forEach(s => {
+  // JAVIS FIX: เรียงให้ดึงข้อมูลล่าสุดขึ้นมาก่อน
+  scores.sort((a, b) => new Date(b.Timestamp || 0) - new Date(a.Timestamp || 0)).forEach(s => {
       const email = String(s.Email).trim().toLowerCase();
       if(!studentMap[email]) {
-          studentMap[email] = { email: email, fullName: email, nickname: '-', department: '-', position: '-', jobTitle: '', profileImage: '', completedSections: [], scores: {}, manualBN: 0, totalBN: 0, lastActive: null, externalProofs: externalProofs.filter(proof => String(proof.Email).trim().toLowerCase() === email) };
+          studentMap[email] = { email: email, fullName: email, nickname: '-', department: '-', position: '-', jobTitle: '', profileImage: '', completedSections: [], sectionTimestamps: {}, scores: {}, quizTimestamps: {}, manualBN: 0, totalBN: 0, lastActive: null, externalProofs: externalProofs.filter(proof => String(proof.Email).trim().toLowerCase() === email) };
       }
       
       let t = s.Timestamp;
@@ -1403,12 +1451,14 @@ function getDashboardStats(period) {
           if (percent >= 0.5) {
              if (!studentMap[email].scores[s.SectionID]) {
                  studentMap[email].scores[s.SectionID] = percent;
+                 studentMap[email].quizTimestamps[s.SectionID] = t; // JAVIS ADDED
                  let earned = (s.EarnedBN !== undefined && s.EarnedBN !== '' && !(s.EarnedBN instanceof Date)) ? parseInt(s.EarnedBN) : (sectionMap[s.SectionID] ? sectionMap[s.SectionID].qp : 0);
                  studentMap[email].totalBN += earned; 
              }
           } else {
              if (!studentMap[email].scores[s.SectionID]) {
                  studentMap[email].scores[s.SectionID] = percent; 
+                 studentMap[email].quizTimestamps[s.SectionID] = t; // JAVIS ADDED
              }
           }
       }
@@ -1417,6 +1467,40 @@ function getDashboardStats(period) {
           studentMap[email].lastActive = t;
       }
   });
+
+  // ========================================================
+  // JAVIS ADDED: ระบบนับจำนวนผู้เข้าเรียนรายวัน (ตัดรอบ 18:00 น.)
+  // ========================================================
+  const dailyActivityMap = {};
+
+  function recordDailyActivity(email, timestamp) {
+      if (!timestamp) return;
+      let d = new Date(timestamp);
+      if (isNaN(d.getTime())) return;
+      
+      // เลื่อนเวลาไปข้างหน้า 6 ชั่วโมง เพื่อให้ 18:00 น. กลายเป็นเที่ยงคืน (ตัดเข้าสู่วันใหม่)
+      let shiftedDate = new Date(d.getTime() + (6 * 60 * 60 * 1000));
+      let dateKey = `${shiftedDate.getFullYear()}-${String(shiftedDate.getMonth() + 1).padStart(2, '0')}-${String(shiftedDate.getDate()).padStart(2, '0')}`;
+      
+      if (!dailyActivityMap[dateKey]) {
+          dailyActivityMap[dateKey] = new Set();
+      }
+      dailyActivityMap[dateKey].add(email.trim().toLowerCase());
+  }
+
+  // ดึงประวัติทั้งหมดมาหาว่าวันไหนใครมีส่วนร่วมบ้าง (เอาคะแนนแมนวลออก ไม่นับรวม)
+  usersProgress.forEach(p => recordDailyActivity(p.Email, p.Timestamp || p.EarnedBN));
+  scores.forEach(s => recordDailyActivity(s.Email, s.Timestamp || s.EarnedBN));
+  externalProofs.forEach(p => recordDailyActivity(p.Email, p.Timestamp));
+  profiles.forEach(p => recordDailyActivity(p.Email, p.LastUpdate)); // JAVIS ADDED: นับการอัปเดตโปรไฟล์ด้วย
+
+  const dailyActivityList = Object.keys(dailyActivityMap).map(dateKey => {
+      return {
+          date: dateKey,
+          userCount: dailyActivityMap[dateKey].size
+      };
+  }).sort((a, b) => b.date.localeCompare(a.date)); // เรียงจากล่าสุดไปเก่า
+
 
   const students = Object.values(studentMap).map(std => {
       std.progressPercent = totalSections > 0 ? Math.round((std.completedSections.length / totalSections) * 100) : 0;
@@ -1438,17 +1522,15 @@ function getDashboardStats(period) {
       
       return std;
   }).filter(std => {
-      if (period !== 'all') {
-         return std.completedSections.length > 0 || Object.keys(std.scores).length > 0 || std.externalProofs.length > 0 || std.manualBN !== 0;
-      }
-      return std.completedSections.length > 0 || Object.keys(std.scores).length > 0 || std.externalProofs.length > 0 || std.manualBN !== 0;
+      return std.completedSections.length > 0 || Object.keys(std.scores).length > 0 || std.externalProofs.length > 0 || std.manualBN !== 0 || std.lastActive !== null;
   }); 
 
   return JSON.stringify({
       totalStudents: students.length,
       totalSections: totalSections,
       totalLessons: lessons.length,
-      students: students.sort((a,b) => b.totalBN - a.totalBN) 
+      students: students.sort((a,b) => b.totalBN - a.totalBN),
+      dailyActivity: dailyActivityList // JAVIS ADDED: ส่งข้อมูลสถิติรายวันกลับไปที่หน้าเว็บ
   });
 }
 
