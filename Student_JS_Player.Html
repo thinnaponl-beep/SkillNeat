@@ -3,6 +3,72 @@
    7. ระบบเล่นวิดีโอ (YouTube Player) & คอร์สภายนอก
 ========================================== */
 
+// ตัวแปรสำหรับการลากจอเล็ก
+let isDraggingMiniPlayer = false;
+let dragStartX, dragStartY, initialPlayerLeft, initialPlayerTop;
+
+function dragStartMiniPlayer(e) {
+    if (!isMiniPlayer) return;
+    isDraggingMiniPlayer = true;
+    
+    const clientX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX;
+    const clientY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY;
+    
+    const rect = views.videoPlayer.getBoundingClientRect();
+    
+    dragStartX = clientX;
+    dragStartY = clientY;
+    initialPlayerLeft = rect.left;
+    initialPlayerTop = rect.top;
+    
+    // เปลี่ยนจาก CSS right/bottom เป็น left/top แบบตายตัว เพื่อให้ลากได้ไม่กระตุก
+    views.videoPlayer.style.bottom = 'auto';
+    views.videoPlayer.style.right = 'auto';
+    views.videoPlayer.style.left = initialPlayerLeft + 'px';
+    views.videoPlayer.style.top = initialPlayerTop + 'px';
+}
+
+function dragMiniPlayer(e) {
+    if (!isDraggingMiniPlayer || !isMiniPlayer) return;
+    
+    const clientX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX;
+    const clientY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
+
+    let newX = initialPlayerLeft + (clientX - dragStartX);
+    let newY = initialPlayerTop + (clientY - dragStartY);
+
+    // ป้องกันการลากหลุดออกนอกขอบจอ
+    newX = Math.max(0, Math.min(newX, window.innerWidth - views.videoPlayer.offsetWidth));
+    newY = Math.max(0, Math.min(newY, window.innerHeight - views.videoPlayer.offsetHeight));
+
+    views.videoPlayer.style.left = newX + 'px';
+    views.videoPlayer.style.top = newY + 'px';
+}
+
+function dragEndMiniPlayer(e) {
+    isDraggingMiniPlayer = false;
+}
+
+// ผูก Event ให้กับแถบลากจอ
+function setupMiniPlayerDrag() {
+    const dragHandle = document.getElementById('mini-player-drag-handle');
+    if (!dragHandle) return;
+
+    dragHandle.addEventListener('mousedown', dragStartMiniPlayer);
+    dragHandle.addEventListener('touchstart', dragStartMiniPlayer, {passive: true});
+
+    // ลบ Event เก่าทิ้งก่อนกันการทำงานซ้ำซ้อน
+    document.removeEventListener('mousemove', dragMiniPlayer);
+    document.removeEventListener('mouseup', dragEndMiniPlayer);
+    document.removeEventListener('touchmove', dragMiniPlayer);
+    document.removeEventListener('touchend', dragEndMiniPlayer);
+
+    document.addEventListener('mousemove', dragMiniPlayer);
+    document.addEventListener('mouseup', dragEndMiniPlayer);
+    document.addEventListener('touchmove', dragMiniPlayer, {passive: true});
+    document.addEventListener('touchend', dragEndMiniPlayer);
+}
+
 function minimizeVideo(backViewStr) {
     const section = currentLesson.sections[currentSectionIndex];
     if(getActualContentType(section) !== 'youtube') {
@@ -13,17 +79,44 @@ function minimizeVideo(backViewStr) {
     
     isMiniPlayer = true;
     
-    // JAVIS FIX: เลิกใช้วิธีย้าย DOM Element เพื่อป้องกันวิดีโอโหลดใหม่ 
-    // เปลี่ยนมาใช้ CSS Fixed วางทับหน้าจอไปเลย
-    views.videoPlayer.classList.add('fixed', 'bottom-6', 'right-6', 'w-80', 'sm:w-96', 'z-[9999]', 'transition-all', 'duration-500');
+    const vp = views.videoPlayer;
+    // ปรับโครงสร้าง CSS สำหรับจอเล็ก เพื่อให้ลากและขยายได้
+    vp.classList.add('fixed', 'z-[9999]', 'shadow-2xl', 'rounded-2xl', 'overflow-hidden', 'bg-slate-900', 'flex', 'flex-col', 'border-2', 'border-slate-700');
+    
+    // กำหนดขนาดเริ่มต้น
+    vp.style.width = '380px';
+    vp.style.height = '240px';
+    vp.style.bottom = '24px';
+    vp.style.right = '24px';
+    vp.style.top = 'auto';
+    vp.style.left = 'auto';
+    
+    // เปิดโหมด CSS Resize ให้ผู้ใช้ดึงมุมขวาล่างขยายเองได้
+    vp.style.resize = 'both';
+    vp.style.minWidth = '280px';
+    vp.style.minHeight = '180px';
+    vp.style.maxWidth = '90vw';
+    vp.style.maxHeight = '90vh';
+
     document.getElementById('video-back-btn').classList.add('hidden');
     document.getElementById('video-header').classList.add('hidden');
+    
     const wrapper = document.getElementById('video-wrapper');
-    wrapper.classList.remove('p-6', 'sm:p-8', 'shadow-xl', 'border', 'border-slate-100', 'bg-white');
-    wrapper.classList.add('shadow-2xl', 'rounded-2xl', 'overflow-hidden');
+    wrapper.classList.remove('p-6', 'sm:p-8', 'shadow-xl', 'border', 'border-slate-100', 'bg-white', 'rounded-[2rem]');
+    wrapper.classList.add('w-full', 'h-full', 'flex-grow'); 
+
+    const mainContainer = document.getElementById('video-main-container');
+    mainContainer.classList.remove('max-w-4xl', 'mx-auto');
+    mainContainer.classList.add('w-full', 'h-full');
+
+    const ytContainer = document.getElementById('youtube-aspect-container');
+    if (ytContainer) ytContainer.classList.remove('aspect-video'); // เอาอัตราส่วนตายตัวออก เพื่อให้ขยายจอได้อิสระ
+
     document.getElementById('mini-player-controls').classList.remove('hidden');
     
-    // JAVIS FIX: ล้างค่า transform ของกล่องแม่ เพื่อป้องกัน CSS Fixed ทำงานเพี้ยน
+    const dragHandle = document.getElementById('mini-player-drag-handle');
+    if (dragHandle) dragHandle.classList.remove('hidden');
+    
     const appContainer = document.getElementById('admin-app') || document.querySelector('.animate-fade-slide-up');
     if (appContainer) {
         appContainer.style.transform = 'none';
@@ -36,20 +129,53 @@ function minimizeVideo(backViewStr) {
 function expandVideo() {
     isMiniPlayer = false;
 
-    views.videoPlayer.classList.remove('fixed', 'bottom-6', 'right-6', 'w-80', 'sm:w-96', 'z-[9999]', 'transition-all', 'duration-500');
+    const vp = views.videoPlayer;
+    vp.classList.remove('fixed', 'z-[9999]', 'shadow-2xl', 'rounded-2xl', 'overflow-hidden', 'bg-slate-900', 'flex', 'flex-col', 'border-2', 'border-slate-700');
+    
+    // ล้างค่า Style ทั้งหมดที่เกิดจากการลาก หรือ ย่อ/ขยายจอเล็ก
+    vp.style.width = '';
+    vp.style.height = '';
+    vp.style.bottom = '';
+    vp.style.right = '';
+    vp.style.top = '';
+    vp.style.left = '';
+    vp.style.resize = '';
+    vp.style.minWidth = '';
+    vp.style.minHeight = '';
+    vp.style.maxWidth = '';
+    vp.style.maxHeight = '';
+
     document.getElementById('video-back-btn').classList.remove('hidden');
     document.getElementById('video-header').classList.remove('hidden');
+    
     const wrapper = document.getElementById('video-wrapper');
-    wrapper.classList.add('p-6', 'sm:p-8', 'shadow-xl', 'border', 'border-slate-100', 'bg-white');
-    wrapper.classList.remove('shadow-2xl', 'rounded-2xl', 'overflow-hidden');
+    wrapper.classList.add('p-6', 'sm:p-8', 'shadow-xl', 'border', 'border-slate-100', 'bg-white', 'rounded-[2rem]');
+    wrapper.classList.remove('w-full', 'h-full', 'flex-grow');
+
+    const mainContainer = document.getElementById('video-main-container');
+    mainContainer.classList.add('max-w-4xl', 'mx-auto');
+    mainContainer.classList.remove('w-full', 'h-full');
+
+    const ytContainer = document.getElementById('youtube-aspect-container');
+    if (ytContainer) ytContainer.classList.add('aspect-video'); // ใส่กลับให้จอปกติสัดส่วนสมบูรณ์
+
     const miniCtrls = document.getElementById('mini-player-controls');
     if (miniCtrls) miniCtrls.classList.add('hidden');
+    
+    const dragHandle = document.getElementById('mini-player-drag-handle');
+    if (dragHandle) dragHandle.classList.add('hidden');
+
     showView('videoPlayer');
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function closeVideo() {
     isMiniPlayer = false;
+
+    // บังคับเซฟเวลาดูวิดีโอล่าสุดทันทีที่กดปิดหรือซ่อนวิดีโอ
+    if (player && typeof player.getCurrentTime === 'function') {
+        saveVideoProgress();
+    }
 
     if (player && typeof player.destroy === 'function') {
         player.destroy();
@@ -61,7 +187,9 @@ function closeVideo() {
     currentExternalProofBase64 = null;
     currentExternalProofMimeType = null;
     
-    views.videoPlayer.classList.remove('fixed', 'bottom-6', 'right-6', 'w-80', 'sm:w-96', 'z-[9999]', 'transition-all', 'duration-500');
+    views.videoPlayer.classList.remove('fixed', 'z-[9999]', 'shadow-2xl', 'rounded-2xl', 'overflow-hidden', 'bg-slate-900', 'flex', 'flex-col', 'border-2', 'border-slate-700');
+    views.videoPlayer.style.width = '';
+    views.videoPlayer.style.height = '';
     views.videoPlayer.classList.add('hidden');
     views.videoPlayer.innerHTML = '';
 }
@@ -88,13 +216,16 @@ function playSection(lessonId, sectionIndex) {
     currentSectionIndex = sectionIndex;
     const section = currentLesson.sections[currentSectionIndex];
     
-    // JAVIS FIX: บันทึกสถานะ "เริ่มเรียน" ลง Server ทันที ป้องกันรีเฟรชแล้วหาย
+    // บันทึกสถานะ "เริ่มเรียน" ลง Server ทันที ป้องกันรีเฟรชแล้วหาย
     if (!currentLesson.isStarted) {
         currentLesson.isStarted = true;
-        google.script.run.updateLatestTimestamp({ 
-            sectionId: String(section.SectionID).trim(), 
-            timestamp: 1 
-        });
+        google.script.run
+            .withFailureHandler(function(err){ console.error('Start Video Error:', err); })
+            .withSuccessHandler(function(res){ if(res && res.status==='error') console.error('Backend Start Error:', res.message); })
+            .updateLatestTimestamp({ 
+                sectionId: String(section.SectionID).trim(), 
+                timestamp: 1 
+            });
     }
     
     const contentType = getActualContentType(section);
@@ -111,21 +242,27 @@ function playSection(lessonId, sectionIndex) {
     const isRejected = section.externalProof && section.externalProof.Status === 'Rejected';
     
     if (contentType === 'youtube') {
-        contentHtml = '<div class="relative w-full aspect-video rounded-2xl overflow-hidden bg-slate-900 shadow-inner group">' +
-            '<div id="player" class="absolute top-0 left-0 w-full h-full"></div>' +
-            '<div id="video-ended-message" class="absolute inset-0 bg-slate-900/95 backdrop-blur-md hidden flex-col justify-center items-center z-30 animate-fade-slide-up p-4"></div>' +
-            '<div id="mini-player-controls" class="hidden absolute inset-0 bg-slate-900/50 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-20 backdrop-blur-[2px]">' +
-                '<button onclick="togglePlayPause()" class="w-12 h-12 bg-white/20 hover:bg-[#31c1d7] text-white rounded-full flex items-center justify-center backdrop-blur-md transition-all"><svg id="play-pause-icon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></button>' +
-                '<button onclick="expandVideo()" class="w-10 h-10 bg-white/20 hover:bg-emerald-500 text-white rounded-full flex items-center justify-center backdrop-blur-md transition-all" title="ขยายเต็มจอ"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg></button>' +
-                '<button onclick="closeVideo()" class="w-10 h-10 bg-white/20 hover:bg-rose-500 text-white rounded-full flex items-center justify-center backdrop-blur-md transition-all" title="ปิดวิดีโอ"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>' +
-            '</div></div>';
+        contentHtml = '<div class="relative w-full h-full flex flex-col rounded-2xl overflow-hidden shadow-inner group">' +
+            '<div id="mini-player-drag-handle" class="hidden w-full h-8 bg-slate-800 flex items-center justify-center cursor-move flex-shrink-0 touch-none hover:bg-slate-700 transition-colors" title="คลิกค้างเพื่อย้ายตำแหน่ง">' +
+                '<div class="w-16 h-1.5 bg-slate-500 rounded-full pointer-events-none"></div>' +
+            '</div>' +
+            '<div class="relative w-full flex-grow bg-slate-900 aspect-video" id="youtube-aspect-container">' +
+                '<div id="player" class="absolute top-0 left-0 w-full h-full"></div>' +
+                '<div id="video-ended-message" class="absolute inset-0 bg-slate-900/95 backdrop-blur-md hidden flex-col justify-center items-center z-30 animate-fade-slide-up p-4 overflow-y-auto"></div>' +
+                '<div id="mini-player-controls" class="hidden absolute inset-0 bg-slate-900/50 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-20 backdrop-blur-[2px]">' +
+                    '<button onclick="togglePlayPause()" class="w-12 h-12 bg-white/20 hover:bg-[#31c1d7] text-white rounded-full flex items-center justify-center backdrop-blur-md transition-all"><svg id="play-pause-icon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></button>' +
+                    '<button onclick="expandVideo()" class="w-10 h-10 bg-white/20 hover:bg-emerald-500 text-white rounded-full flex items-center justify-center backdrop-blur-md transition-all" title="ขยายเต็มจอ"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg></button>' +
+                    '<button onclick="closeVideo()" class="w-10 h-10 bg-white/20 hover:bg-rose-500 text-white rounded-full flex items-center justify-center backdrop-blur-md transition-all" title="ปิดวิดีโอ"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
     } else if (contentType === 'external') {
         let uploadAreaHtml = '';
         if (isAlreadyCompleted) {
              uploadAreaHtml = '<div class="mt-8 p-4 bg-emerald-50 text-emerald-600 rounded-xl font-bold text-center border border-emerald-100"><span class="mr-2">✅</span> หลักฐานผ่านการตรวจสอบเรียบร้อยแล้ว</div>';
         } else if (isPending) {
              uploadAreaHtml = '<div class="mt-8 p-6 bg-amber-50 rounded-2xl border border-amber-200 text-center"><div class="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-3"><svg class="animate-spin w-8 h-8 text-amber-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div><h4 class="text-lg font-bold text-amber-700 mb-2">ส่งหลักฐานแล้ว รอการตรวจสอบ</h4><p class="text-sm text-amber-600 mb-4">แอดมินกำลังตรวจสอบความถูกต้องของหลักฐานคุณ ระหว่างนี้สามารถทำข้อสอบ (ถ้ามี) หรือเรียนบทต่อไปได้เลย</p>';
-             if (section.hasQuiz) uploadAreaHtml += '<button onclick="startQuiz()" class="px-6 py-3 bg-violet-500 hover:bg-violet-600 text-white font-bold rounded-xl transition-all shadow-sm">เริ่มทำแบบทดสอบ</button>';
+             if (section.hasQuiz) uploadAreaHtml += '<button onclick="closeVideo(); startQuiz()" class="px-6 py-3 bg-violet-500 hover:bg-violet-600 text-white font-bold rounded-xl transition-all shadow-sm">เริ่มทำแบบทดสอบ</button>';
              uploadAreaHtml += '</div>';
         } else {
             uploadAreaHtml = '<div class="border-t border-blue-200 pt-8" id="external-upload-container">' +
@@ -145,14 +282,15 @@ function playSection(lessonId, sectionIndex) {
             uploadAreaHtml + '<div id="video-ended-message" class="absolute inset-0 bg-slate-900/95 backdrop-blur-md hidden flex-col justify-center items-center z-30 animate-fade-slide-up p-4"></div></div>';
     }
     
-    views.videoPlayer.innerHTML = '<div id="video-main-container" class="max-w-4xl mx-auto w-full transition-all duration-300">' +
-        '<button id="video-back-btn" onclick="minimizeVideo(\'' + safeBackViewStr + '\')" class="mb-6 text-slate-500 font-bold py-2 px-4 rounded-xl hover:bg-slate-100 inline-flex items-center transition-all" title="ย่อวิดีโอเป็นจอเล็ก">&larr; ย่อวิดีโอกลับหน้าหลัก</button>' +
-        '<div id="video-wrapper" class="bg-white p-6 sm:p-8 rounded-[2rem] shadow-xl border border-slate-100 relative transition-all duration-300">' +
-        '<div id="video-header" class="mb-6 flex flex-col sm:flex-row sm:items-end justify-between gap-4"><div><span class="text-[11px] font-black text-[#31c1d7] tracking-[0.2em] uppercase mb-2 block">Now Learning</span>' +
+    views.videoPlayer.innerHTML = '<div id="video-main-container" class="max-w-4xl mx-auto w-full transition-all duration-300 h-full flex flex-col">' +
+        '<button id="video-back-btn" onclick="minimizeVideo(\'' + safeBackViewStr + '\')" class="mb-6 text-slate-500 font-bold py-2 px-4 rounded-xl hover:bg-slate-100 inline-flex items-center transition-all flex-shrink-0 w-fit" title="ย่อวิดีโอเป็นจอเล็ก">&larr; ย่อวิดีโอกลับหน้าหลัก</button>' +
+        '<div id="video-wrapper" class="bg-white p-6 sm:p-8 rounded-[2rem] shadow-xl border border-slate-100 relative transition-all duration-300 flex flex-col">' +
+        '<div id="video-header" class="mb-6 flex flex-col sm:flex-row sm:items-end justify-between gap-4 flex-shrink-0"><div><span class="text-[11px] font-black text-[#31c1d7] tracking-[0.2em] uppercase mb-2 block">Now Learning</span>' +
         '<h2 class="text-2xl sm:text-3xl font-extrabold text-slate-800 leading-tight">' + escapeHtml(section.Title) + '</h2>' +
         '<p class="text-slate-500 mt-2 font-medium text-base">' + escapeHtml(currentLesson.Title) + '</p></div></div>' + contentHtml + '</div></div>';
     
     showView('videoPlayer');
+    setupMiniPlayerDrag(); 
     if (contentType === 'youtube') {
         if (player) player.destroy();
         loadYouTubePlayer(section.YouTubeVideoID, latestTimestampWatched);
@@ -166,11 +304,22 @@ function loadYouTubePlayer(videoId, startSeconds) {
     player = new YT.Player('player', {
         height: '100%', width: '100%', videoId: videoId,
         playerVars: { 'autoplay': 1, 'start': startSeconds, 'rel': 0, 'modestbranding': 1, 'playsinline': 1 },
-        events: { 'onReady': onPlayerReady, 'onStateChange': onPlayerStateChange }
+        events: { 
+            'onReady': onPlayerReady, 
+            'onStateChange': onPlayerStateChange,
+            'onPlaybackRateChange': onPlaybackRateChange
+        }
     });
 }
 
 function onPlayerReady(event) { }
+
+function onPlaybackRateChange(event) {
+    if (event.data > 1) {
+        player.setPlaybackRate(1);
+        showToast('ไม่อนุญาตให้เร่งความเร็ววิดีโอ เพื่อให้แน่ใจว่าได้รับเนื้อหาครบถ้วนครับ 🐢', 'error');
+    }
+}
 
 function onPlayerStateChange(event) {
     const ppIcon = document.getElementById('play-pause-icon');
@@ -181,12 +330,16 @@ function onPlayerStateChange(event) {
         if (!videoTrackerInterval) videoTrackerInterval = setInterval(checkVideoSkip, 500);
         if (ppIcon) ppIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
     } else {
+        // บังคับเซฟเวลาดูล่าสุดทันทีเมื่อกดหยุด (Pause) หรือวิดีโอสะดุด
+        if (event.data == YT.PlayerState.PAUSED) {
+            saveVideoProgress();
+        }
+        
         if (progressSaveTimeout) clearInterval(progressSaveTimeout);
         if (event.data == YT.PlayerState.PAUSED && ppIcon) ppIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
     }
     if (event.data == YT.PlayerState.ENDED) {
         if (videoTrackerInterval) { clearInterval(videoTrackerInterval); videoTrackerInterval = null; }
-        if (isMiniPlayer) expandVideo();
         showVideoEndedMessage();
     }
 }
@@ -214,13 +367,32 @@ function checkVideoSkip() {
 }
 
 function saveVideoProgress() {
-    if (player && typeof player.getCurrentTime === 'function') {
-        const sectionId = currentLesson.sections[currentSectionIndex].SectionID;
-        google.script.run.updateLatestTimestamp({ sectionId: sectionId, timestamp: Math.floor(maxTimeWatched) });
+    if (player && typeof player.getCurrentTime === 'function' && currentLesson && currentLesson.sections) {
+        const section = currentLesson.sections[currentSectionIndex];
+        if (section) {
+            const sectionId = section.SectionID;
+            
+            // บังคับให้เวลาขั้นต่ำที่เซฟคือ 1 วินาที ป้องกันการเซฟ 0 ทับของเดิมเมื่อกดปิดทันที
+            const currentTimeToSave = Math.max(1, Math.floor(maxTimeWatched));
+            
+            // อัปเดตเวลาลงในหน่วยความจำของหน้าเว็บ (RAM) ทันที! 
+            section.latestTimestamp = currentTimeToSave;
+            currentLesson.isStarted = true; // ยืนยันสถานะว่าเรียนแล้ว
+            
+            google.script.run
+                .withFailureHandler(function(err){ console.error('Save Video Error:', err); })
+                .withSuccessHandler(function(res){ if(res && res.status==='error') console.error('Backend Save Error:', res.message); })
+                .updateLatestTimestamp({ sectionId: sectionId, timestamp: currentTimeToSave });
+        }
     }
 }
 
 function showVideoEndedMessage() {
+    // บังคับขยายเต็มจอก่อนโชว์ข้อความ เพื่อไม่ให้ข้อความไปอัดกันในจอเล็ก
+    if (isMiniPlayer) {
+        expandVideo();
+    }
+
     const msgBox = document.getElementById('video-ended-message');
     const section = currentLesson.sections[currentSectionIndex];
     let vp = parseInt(section.VideoPoints, 10); if (isNaN(vp)) vp = 10;
@@ -253,16 +425,18 @@ function showVideoEndedMessage() {
         '<div class="flex flex-col sm:flex-row gap-3 sm:gap-4 w-full max-w-sm mx-auto justify-center flex-wrap">';
         
     const safeLessonIdStr = escapeJsString(currentLesson.LessonID);
+    const hasCert = currentLesson.HasCertificate === true || currentLesson.HasCertificate === 'TRUE' || String(currentLesson.HasCertificate).toLowerCase() === 'true';
 
+    // JAVIS FIX: ฝังโค้ด closeVideo() เข้าไปในทุกๆ ปุ่มเพื่อให้การทำงานถูกรีเซ็ตใหม่เสมอ
     if (section.hasQuiz) {
-        html += '<button onclick="startQuiz()" class="w-full px-6 py-3 sm:py-4 bg-[#31c1d7] text-white font-bold rounded-xl sm:rounded-2xl hover:bg-[#1eb0c6] transition-all shadow-lg shadow-[#31c1d7]/30 text-base sm:text-lg">เริ่มทำแบบทดสอบ</button>';
+        html += '<button onclick="closeVideo(); startQuiz()" class="w-full px-6 py-3 sm:py-4 bg-[#31c1d7] text-white font-bold rounded-xl sm:rounded-2xl hover:bg-[#1eb0c6] transition-all shadow-lg shadow-[#31c1d7]/30 text-base sm:text-lg">เริ่มทำแบบทดสอบ</button>';
     } else {
         if (currentSectionIndex < currentLesson.sections.length - 1) {
-            html += '<button onclick="playSection(\'' + safeLessonIdStr + '\', ' + (currentSectionIndex + 1) + ')" class="w-full px-6 py-3 sm:py-4 bg-[#31c1d7] text-white font-bold rounded-xl sm:rounded-2xl hover:bg-[#1eb0c6] transition-all shadow-lg text-base sm:text-lg">เรียนบทถัดไป</button>';
+            html += '<button onclick="closeVideo(); playSection(\'' + safeLessonIdStr + '\', ' + (currentSectionIndex + 1) + ')" class="w-full px-6 py-3 sm:py-4 bg-[#31c1d7] text-white font-bold rounded-xl sm:rounded-2xl hover:bg-[#1eb0c6] transition-all shadow-lg text-base sm:text-lg">เรียนบทถัดไป</button>';
         } else {
             const lessonStats = getLessonProgressStats(currentLesson);
-            if (lessonStats.isCompleted) html += '<button onclick="downloadCertificate(\'' + safeLessonIdStr + '\')" class="w-full px-6 py-3 sm:py-4 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl sm:rounded-2xl transition-all text-lg shadow-lg mb-2">🎓 ดูตัวอย่างใบประกาศ</button>';
-            html += '<button onclick="showView(\'lessonList\'); if(typeof renderLessonList === \'function\') renderLessonList(); if(typeof renderMyCourses === \'function\') renderMyCourses();" class="w-full px-6 py-3 sm:py-4 bg-[#31c1d7] text-white font-bold rounded-xl sm:rounded-2xl hover:bg-[#1eb0c6] transition-all shadow-lg text-base sm:text-lg">กลับหน้าหลัก</button>';
+            if (lessonStats.isCompleted && hasCert) html += '<button onclick="downloadCertificate(\'' + safeLessonIdStr + '\')" class="w-full px-6 py-3 sm:py-4 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl sm:rounded-2xl transition-all text-lg shadow-lg mb-2">🎓 ดูตัวอย่างใบประกาศ</button>';
+            html += '<button onclick="closeVideo(); showView(\'lessonList\'); if(typeof renderLessonList === \'function\') renderLessonList(); if(typeof renderMyCourses === \'function\') renderMyCourses();" class="w-full px-6 py-3 sm:py-4 bg-[#31c1d7] text-white font-bold rounded-xl sm:rounded-2xl hover:bg-[#1eb0c6] transition-all shadow-lg text-base sm:text-lg">กลับหน้าหลัก</button>';
         }
     }
     
@@ -270,7 +444,7 @@ function showVideoEndedMessage() {
     if (player && typeof player.seekTo === 'function') seekCode = 'player.seekTo(0); player.playVideo();';
 
     if (getActualContentType(section) === 'youtube') html += '<button onclick="document.getElementById(\'video-ended-message\').classList.add(\'hidden\'); document.getElementById(\'video-ended-message\').classList.remove(\'flex\'); ' + seekCode + '" class="w-full px-6 py-3 sm:py-4 bg-white/10 text-white font-bold rounded-xl sm:rounded-2xl hover:bg-white/20 transition-all text-base sm:text-lg border border-white/10 mt-1">ดูซ้ำอีกครั้ง</button></div>';
-    else html += '<button onclick="showView(\'lessonList\'); if(typeof renderLessonList === \'function\') renderLessonList(); if(typeof renderMyCourses === \'function\') renderMyCourses();" class="w-full px-6 py-3 sm:py-4 bg-white/10 text-white font-bold rounded-xl sm:rounded-2xl hover:bg-white/20 transition-all text-base sm:text-lg border border-white/10 mt-1">ปิดหน้าต่าง</button></div>';
+    else html += '<button onclick="closeVideo(); showView(\'lessonList\'); if(typeof renderLessonList === \'function\') renderLessonList(); if(typeof renderMyCourses === \'function\') renderMyCourses();" class="w-full px-6 py-3 sm:py-4 bg-white/10 text-white font-bold rounded-xl sm:rounded-2xl hover:bg-white/20 transition-all text-base sm:text-lg border border-white/10 mt-1">ปิดหน้าต่าง</button></div>';
     
     msgBox.innerHTML = html;
     msgBox.classList.remove('hidden');
@@ -379,7 +553,7 @@ function renderQuiz() {
         html += '</div>';
     });
 
-    html += '</div><div class="px-8 py-6 bg-slate-50 border-t border-slate-100 flex justify-between items-center"><button onclick="playSection(\'' + safeLessonId + '\', ' + currentSectionIndex + ')" class="text-slate-500 font-bold hover:text-slate-800 transition-colors">กลับไปดูเนื้อหา</button><button onclick="submitQuiz()" class="px-8 py-3.5 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-900 transition-all shadow-md">ส่งคำตอบ</button></div></div>';
+    html += '</div><div class="px-8 py-6 bg-slate-50 border-t border-slate-100 flex justify-between items-center"><button onclick="closeVideo(); playSection(\'' + safeLessonId + '\', ' + currentSectionIndex + ')" class="text-slate-500 font-bold hover:text-slate-800 transition-colors">กลับไปดูเนื้อหา</button><button onclick="submitQuiz()" class="px-8 py-3.5 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-900 transition-all shadow-md">ส่งคำตอบ</button></div></div>';
     views.quiz.innerHTML = html;
 }
 
@@ -447,11 +621,14 @@ function showQuizResult(score, total, passed, isNewPass) {
         icon + title + desc + '<div class="my-8 p-6 bg-slate-50 rounded-2xl border border-slate-100"><div class="text-5xl font-black ' + (passed ? 'text-emerald-500' : 'text-rose-500') + ' mb-2">' + percent + '%</div><div class="text-sm font-bold text-slate-400 uppercase tracking-widest">คะแนน ' + score + ' / ' + total + '</div></div>';
 
     const safeLessonId = escapeJsString(currentLesson.LessonID);
+    const hasCert = currentLesson.HasCertificate === true || currentLesson.HasCertificate === 'TRUE' || String(currentLesson.HasCertificate).toLowerCase() === 'true';
+    
+    // JAVIS FIX: เพิ่ม closeVideo() เพื่อล้างระบบวิดีโอเมื่อกลับหน้าหลัก หรือเรียนซ้ำ
     if (passed) {
-        if (getLessonProgressStats(currentLesson).isCompleted) html += '<button onclick="downloadCertificate(\'' + safeLessonId + '\')" class="w-full px-6 py-4 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-all text-lg shadow-lg mb-3">🎓 ดาวน์โหลดใบประกาศ</button>';
-        html += '<button onclick="showView(\'lessonList\'); if(typeof renderLessonList === \'function\') renderLessonList(); if(typeof renderMyCourses === \'function\') renderMyCourses();" class="w-full px-6 py-4 ' + btnClass + ' text-white font-bold rounded-xl transition-all text-lg">' + btnText + '</button>';
+        if (getLessonProgressStats(currentLesson).isCompleted && hasCert) html += '<button onclick="downloadCertificate(\'' + safeLessonId + '\')" class="w-full px-6 py-4 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-all text-lg shadow-lg mb-3">🎓 ดาวน์โหลดใบประกาศ</button>';
+        html += '<button onclick="closeVideo(); showView(\'lessonList\'); if(typeof renderLessonList === \'function\') renderLessonList(); if(typeof renderMyCourses === \'function\') renderMyCourses();" class="w-full px-6 py-4 ' + btnClass + ' text-white font-bold rounded-xl transition-all text-lg">' + btnText + '</button>';
     } else {
-        html += '<button onclick="playSection(\'' + safeLessonId + '\', ' + currentSectionIndex + ')" class="w-full px-6 py-4 ' + btnClass + ' text-white font-bold rounded-xl transition-all text-lg">' + btnText + '</button>';
+        html += '<button onclick="closeVideo(); playSection(\'' + safeLessonId + '\', ' + currentSectionIndex + ')" class="w-full px-6 py-4 ' + btnClass + ' text-white font-bold rounded-xl transition-all text-lg">' + btnText + '</button>';
     }
     
     html += '</div>';
