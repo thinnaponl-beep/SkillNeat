@@ -208,6 +208,18 @@ function togglePlayPause() {
     }
 }
 
+// ลบฟังก์ชันเปลี่ยนความเร็วเดิมทิ้งไป ปล่อยให้ปรับในฟันเฟือง Youtube อย่างเดียวได้เลย
+function changeVideoSpeed(rate) {
+    if (player && typeof player.setPlaybackRate === 'function') {
+        player.setPlaybackRate(parseFloat(rate));
+        
+        const state = player.getPlayerState();
+        if (state !== YT.PlayerState.PLAYING) {
+            player.playVideo();
+        }
+    }
+}
+
 function playSection(lessonId, sectionIndex) {
     if(typeof closeLessonDetailsModal === 'function') closeLessonDetailsModal();
     if (isMiniPlayer) closeVideo();
@@ -216,7 +228,6 @@ function playSection(lessonId, sectionIndex) {
     currentSectionIndex = sectionIndex;
     const section = currentLesson.sections[currentSectionIndex];
     
-    // บันทึกสถานะ "เริ่มเรียน" ลง Server ทันที ป้องกันรีเฟรชแล้วหาย
     if (!currentLesson.isStarted) {
         currentLesson.isStarted = true;
         google.script.run
@@ -282,12 +293,15 @@ function playSection(lessonId, sectionIndex) {
             uploadAreaHtml + '<div id="video-ended-message" class="absolute inset-0 bg-slate-900/95 backdrop-blur-md hidden flex-col justify-center items-center z-30 animate-fade-slide-up p-4"></div></div>';
     }
     
-    views.videoPlayer.innerHTML = '<div id="video-main-container" class="max-w-4xl mx-auto w-full transition-all duration-300 h-full flex flex-col">' +
+    // JAVIS FIX: ขยายขนาดกล่อง Player จาก max-w-4xl เป็น max-w-6xl (หรือ 7xl) เพื่อให้วิดีโอใหญ่ขึ้นเต็มตากว่าเดิม
+    views.videoPlayer.innerHTML = '<div id="video-main-container" class="max-w-6xl mx-auto w-full transition-all duration-300 h-full flex flex-col">' +
         '<button id="video-back-btn" onclick="minimizeVideo(\'' + safeBackViewStr + '\')" class="mb-6 text-slate-500 font-bold py-2 px-4 rounded-xl hover:bg-slate-100 inline-flex items-center transition-all flex-shrink-0 w-fit" title="ย่อวิดีโอเป็นจอเล็ก">&larr; ย่อวิดีโอกลับหน้าหลัก</button>' +
         '<div id="video-wrapper" class="bg-white p-6 sm:p-8 rounded-[2rem] shadow-xl border border-slate-100 relative transition-all duration-300 flex flex-col">' +
-        '<div id="video-header" class="mb-6 flex flex-col sm:flex-row sm:items-end justify-between gap-4 flex-shrink-0"><div><span class="text-[11px] font-black text-[#31c1d7] tracking-[0.2em] uppercase mb-2 block">Now Learning</span>' +
+        '<div id="video-header" class="mb-6 flex flex-col sm:flex-row sm:items-start justify-between sm:gap-4 flex-shrink-0">' +
+        '<div><span class="text-[11px] font-black text-[#31c1d7] tracking-[0.2em] uppercase mb-2 block">Now Learning</span>' +
         '<h2 class="text-2xl sm:text-3xl font-extrabold text-slate-800 leading-tight">' + escapeHtml(section.Title) + '</h2>' +
-        '<p class="text-slate-500 mt-2 font-medium text-base">' + escapeHtml(currentLesson.Title) + '</p></div></div>' + contentHtml + '</div></div>';
+        '<p class="text-slate-500 mt-2 font-medium text-base">' + escapeHtml(currentLesson.Title) + '</p></div>' + 
+        '</div>' + contentHtml + '</div></div>';
     
     showView('videoPlayer');
     setupMiniPlayerDrag(); 
@@ -314,10 +328,11 @@ function loadYouTubePlayer(videoId, startSeconds) {
 
 function onPlayerReady(event) { }
 
+// JAVIS REFACTORED: อนุญาตให้ผู้เรียนปรับความเร็วผ่านปุ่มบน UI ที่เราทำไว้ หรือบนฟันเฟืองของ YouTube ก็ได้
 function onPlaybackRateChange(event) {
-    if (event.data > 1) {
-        player.setPlaybackRate(1);
-        showToast('ไม่อนุญาตให้เร่งความเร็ววิดีโอ เพื่อให้แน่ใจว่าได้รับเนื้อหาครบถ้วนครับ 🐢', 'error');
+    const speedSelect = document.getElementById('video-speed-select');
+    if (speedSelect) {
+        speedSelect.value = event.data; // Sync ค่าใน UI ของเราให้ตรงกับที่ YouTube ปรับ
     }
 }
 
@@ -344,6 +359,7 @@ function onPlayerStateChange(event) {
     }
 }
 
+// JAVIS REFACTORED: ปรับเพิ่ม Threshold เป็น +3 วิ เพื่อรองรับจังหวะที่ผู้ใช้อาจเล่นวิดีโอด้วยความเร็ว 2x 
 function checkVideoSkip() {
     if (player && typeof player.getCurrentTime === 'function') {
         const currentTime = player.getCurrentTime();
@@ -357,9 +373,10 @@ function checkVideoSkip() {
             return;
         }
 
-        if (currentTime > maxTimeWatched + 2) {
+        // ปรับเป็น maxTimeWatched + 3 เพื่อความยืดหยุ่นในการดู 2x
+        if (currentTime > maxTimeWatched + 3) {
             player.seekTo(maxTimeWatched); 
-            showToast('ไม่อนุญาตให้กรอวิดีโอข้ามเนื้อหาครับ 🚫', 'error');
+            if(typeof showToast !== 'undefined') showToast('ไม่อนุญาตให้กรอวิดีโอข้ามเนื้อหาครับ 🚫', 'error');
         } else {
             if (currentTime > maxTimeWatched) maxTimeWatched = currentTime;
         }
@@ -623,7 +640,6 @@ function showQuizResult(score, total, passed, isNewPass) {
     const safeLessonId = escapeJsString(currentLesson.LessonID);
     const hasCert = currentLesson.HasCertificate === true || currentLesson.HasCertificate === 'TRUE' || String(currentLesson.HasCertificate).toLowerCase() === 'true';
     
-    // JAVIS FIX: เพิ่ม closeVideo() เพื่อล้างระบบวิดีโอเมื่อกลับหน้าหลัก หรือเรียนซ้ำ
     if (passed) {
         if (getLessonProgressStats(currentLesson).isCompleted && hasCert) html += '<button onclick="downloadCertificate(\'' + safeLessonId + '\')" class="w-full px-6 py-4 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-all text-lg shadow-lg mb-3">🎓 ดาวน์โหลดใบประกาศ</button>';
         html += '<button onclick="closeVideo(); showView(\'lessonList\'); if(typeof renderLessonList === \'function\') renderLessonList(); if(typeof renderMyCourses === \'function\') renderMyCourses();" class="w-full px-6 py-4 ' + btnClass + ' text-white font-bold rounded-xl transition-all text-lg">' + btnText + '</button>';
