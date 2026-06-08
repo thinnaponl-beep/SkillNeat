@@ -1,5 +1,5 @@
 // ===============================================================
-// FILE: Code.gs (Full Complete Version)
+// FILE: Code.gs (Full Complete Version - Passed Score 80%)
 // ===============================================================
 
 const SPREADSHEET_ID = '15r5QIYPTfPem1qJEltcZw1mu2LO_N4N9pFAPkQDR5sg'; 
@@ -285,7 +285,6 @@ function getStudentData(userEmail) {
      if (found) userProfile = found;
   }
 
-  // JAVIS FIX: คำนวณคะแนนใหม่ เริ่มจาก 0 เสมอ เพื่อให้อ่านประวัติการได้คะแนนจริงๆ ป้องกันการ Desync
   let totalBN = 0; 
 
   const historyMap = {};
@@ -316,7 +315,6 @@ function getStudentData(userEmail) {
       historyMap[key].total += points;
   }
 
-  // JAVIS FIX: กรองเอาประวัติล่าสุดขึ้นมาก่อน ป้องกันการเรียนซ้ำแล้วโดนทับด้วย 0
   let studentEarnedSections = {};
   rawProgress.sort((a, b) => new Date(b.Timestamp || 0) - new Date(a.Timestamp || 0)).forEach(p => {
       if (!studentEarnedSections[p.SectionID]) {
@@ -335,7 +333,7 @@ function getStudentData(userEmail) {
   sortedScores.forEach(s => {
       if (!studentPassedQuizzes[s.SectionID]) {
           const percent = s.TotalQuestions > 0 ? (s.Score / s.TotalQuestions) : 0;
-          if (percent >= 0.5) {
+          if (percent >= 0.8) { // JAVIS FIX: อัปเดตเกณฑ์ผ่านเป็น 80% (0.8)
               studentPassedQuizzes[s.SectionID] = true;
               const sec = sections.find(sec => sec.SectionID === s.SectionID);
               let t = s.Timestamp;
@@ -347,7 +345,6 @@ function getStudentData(userEmail) {
       }
   });
 
-  // JAVIS FIX: ดึงคะแนนพิเศษมาจาก Manual Log ทั้งหมดโดยตรง
   manualLogs.forEach(m => { 
       let pts = parseInt(m.Points) || 0;
       addHistory(m.Timestamp, pts); 
@@ -379,7 +376,8 @@ function getStudentData(userEmail) {
     
     lesson.isCompleted = lesson.sections.length > 0 && lesson.sections.every(s => {
         const isVideoDone = progress.includes(s.SectionID);
-        const isQuizDone = !s.hasQuiz || (s.quizScore && (s.quizScore.Score / s.quizScore.TotalQuestions) >= 0.5);
+        // JAVIS FIX: อัปเดตเกณฑ์ผ่านคอร์สสำหรับข้อสอบเป็น 80% (0.8)
+        const isQuizDone = !s.hasQuiz || (s.quizScore && (s.quizScore.Score / s.quizScore.TotalQuestions) >= 0.8);
         return isVideoDone && isQuizDone;
     });
 
@@ -483,6 +481,16 @@ function getPublicLeaderboard(period) {
       const email = String(p.Email).trim().toLowerCase();
       let defaultImg = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(p.Nickname || p.FullName || email) + '&background=31c1d7&color=fff';
 
+      let activePet = null;
+      try {
+          if (p.PetData) {
+              const petData = JSON.parse(p.PetData);
+              if (petData.inventory && petData.inventory.length > 0 && petData.activePetIndex >= 0) {
+                  activePet = petData.inventory[petData.activePetIndex];
+              }
+          }
+      } catch(e) {}
+
       studentMap[email] = {
           email: email,
           name: p.Nickname || p.FullName || email.split('@')[0],
@@ -490,24 +498,23 @@ function getPublicLeaderboard(period) {
           img: p.ProfileImage || defaultImg,
           completedSections: [],
           scores: {},
-          totalBN: 0 // JAVIS FIX: บังคับเริ่ม 0 เพื่อคำนวณจาก Log แทน Profile 
+          totalBN: 0,
+          activePet: activePet 
       };
   });
 
-  // JAVIS FIX: รวมคะแนนแมนวลสำหรับทุก Period (แก้บั๊กคนหายออกจากตารางสะสม)
   manualLogs.forEach(m => {
       const email = String(m.Email).trim().toLowerCase();
       if (!studentMap[email]) {
-          studentMap[email] = { email: email, name: email.split('@')[0], dept: 'General', img: 'https://ui-avatars.com/api/?name='+email+'&background=31c1d7&color=fff', completedSections: [], scores: {}, totalBN: 0 };
+          studentMap[email] = { email: email, name: email.split('@')[0], dept: 'General', img: 'https://ui-avatars.com/api/?name='+email+'&background=31c1d7&color=fff', completedSections: [], scores: {}, totalBN: 0, activePet: null };
       }
       studentMap[email].totalBN += (parseInt(m.Points) || 0);
   });
 
-  // JAVIS FIX: เรียงให้ดึงข้อมูลล่าสุดเป็นตัวตั้งต้น (แก้ปัญหาคะแนนไม่อัปเดตเมื่อเรียนซ้ำ)
   usersProgress.sort((a, b) => new Date(b.Timestamp || 0) - new Date(a.Timestamp || 0)).forEach(p => {
       const email = String(p.Email).trim().toLowerCase();
       if(!studentMap[email]) { 
-          studentMap[email] = { email: email, name: email.split('@')[0], dept: 'General', img: 'https://ui-avatars.com/api/?name='+email+'&background=31c1d7&color=fff', completedSections: [], scores: {}, totalBN: 0 };
+          studentMap[email] = { email: email, name: email.split('@')[0], dept: 'General', img: 'https://ui-avatars.com/api/?name='+email+'&background=31c1d7&color=fff', completedSections: [], scores: {}, totalBN: 0, activePet: null };
       }
       if (sectionMap[p.SectionID] && !studentMap[email].completedSections.includes(p.SectionID)) {
           studentMap[email].completedSections.push(p.SectionID);
@@ -519,11 +526,11 @@ function getPublicLeaderboard(period) {
   scores.sort((a, b) => new Date(b.Timestamp || 0) - new Date(a.Timestamp || 0)).forEach(s => {
       const email = String(s.Email).trim().toLowerCase();
       if(!studentMap[email]) {
-          studentMap[email] = { email: email, name: email.split('@')[0], dept: 'General', img: 'https://ui-avatars.com/api/?name='+email+'&background=31c1d7&color=fff', completedSections: [], scores: {}, totalBN: 0 };
+          studentMap[email] = { email: email, name: email.split('@')[0], dept: 'General', img: 'https://ui-avatars.com/api/?name='+email+'&background=31c1d7&color=fff', completedSections: [], scores: {}, totalBN: 0, activePet: null };
       }
       if (sectionMap[s.SectionID]) {
           const percent = s.TotalQuestions > 0 ? (s.Score / s.TotalQuestions) : 0;
-          if (percent >= 0.5) { 
+          if (percent >= 0.8) { // JAVIS FIX: อัปเดตเกณฑ์ผ่านเป็น 80% (0.8)
              if (!studentMap[email].scores[s.SectionID]) { 
                  studentMap[email].scores[s.SectionID] = percent;
                  let earned = (s.EarnedBN !== undefined && s.EarnedBN !== '' && !(s.EarnedBN instanceof Date)) ? parseInt(s.EarnedBN) : (sectionMap[s.SectionID] ? sectionMap[s.SectionID].qp : 0);
@@ -560,7 +567,8 @@ function saveQuizScore(scoreData) {
             }
         }
 
-        const passed = (scoreData.score / scoreData.totalQuestions) >= 0.5;
+        // JAVIS FIX: เปลี่ยนเกณฑ์ผ่านให้บันทึกเป็น 80% (0.8)
+        const passed = (scoreData.score / scoreData.totalQuestions) >= 0.8;
         let earnedPoints = 0;
         
         if (passed) {
@@ -806,7 +814,6 @@ function updateUserProfile(data) {
        headers.push('JobTitle');
     }
 
-    // JAVIS ADDED: เพิ่มคอลัมน์เก็บเวลาอัปเดตโปรไฟล์ล่าสุด
     let lastUpdateCol = headers.indexOf('LastUpdate');
     if (lastUpdateCol === -1) {
        lastUpdateCol = headers.length;
@@ -840,7 +847,7 @@ function updateUserProfile(data) {
       if (profileImageUrl && imgCol > -1) {
         sheet.getRange(rowIndex, imgCol + 1).setValue(profileImageUrl);
       }
-      if (lastUpdateCol > -1) sheet.getRange(rowIndex, lastUpdateCol + 1).setValue(new Date()); // JAVIS ADDED
+      if (lastUpdateCol > -1) sheet.getRange(rowIndex, lastUpdateCol + 1).setValue(new Date()); 
     } else {
       const newRow = new Array(headers.length).fill('');
       newRow[emailCol] = userEmail;
@@ -850,7 +857,7 @@ function updateUserProfile(data) {
       newRow[posCol] = 'พนักงาน';
       newRow[manualCol] = 0;
       newRow[jobCol] = data.jobTitle || '';
-      newRow[lastUpdateCol] = new Date(); // JAVIS ADDED
+      newRow[lastUpdateCol] = new Date(); 
       if (profileImageUrl) newRow[imgCol] = profileImageUrl;
       sheet.appendRow(newRow);
     }
@@ -936,7 +943,6 @@ function saveLesson(data) {
       headers.push('IsCategoryFeatured');
     }
 
-    // JAVIS ADDED: เพิ่มคอลัมน์ HasCertificate ถ้ายังไม่มี
     let certCol = headers.indexOf('HasCertificate');
     if (certCol === -1) {
       certCol = headers.length;
@@ -972,7 +978,7 @@ function saveLesson(data) {
         if (activeCol > -1) sheet.getRange(rowIndex, activeCol + 1).setValue(data.IsActive);
         if (featCol > -1) sheet.getRange(rowIndex, featCol + 1).setValue(data.IsFeatured); 
         if (catFeatCol > -1) sheet.getRange(rowIndex, catFeatCol + 1).setValue(data.IsCategoryFeatured); 
-        if (certCol > -1) sheet.getRange(rowIndex, certCol + 1).setValue(data.HasCertificate !== undefined ? data.HasCertificate : true); // JAVIS ADDED
+        if (certCol > -1) sheet.getRange(rowIndex, certCol + 1).setValue(data.HasCertificate !== undefined ? data.HasCertificate : true); 
         if (categoryCol > -1) sheet.getRange(rowIndex, categoryCol + 1).setValue(data.Category);
         if (mainCatCol > -1) sheet.getRange(rowIndex, mainCatCol + 1).setValue(data.MainCategory); 
         if (targetDeptCol > -1) sheet.getRange(rowIndex, targetDeptCol + 1).setValue(data.TargetDepartments);
@@ -993,7 +999,7 @@ function saveLesson(data) {
       if (activeCol > -1) newRow[activeCol] = data.IsActive;
       if (featCol > -1) newRow[featCol] = data.IsFeatured; 
       if (catFeatCol > -1) newRow[catFeatCol] = data.IsCategoryFeatured;
-      if (certCol > -1) newRow[certCol] = (data.HasCertificate !== undefined ? data.HasCertificate : true); // JAVIS ADDED
+      if (certCol > -1) newRow[certCol] = (data.HasCertificate !== undefined ? data.HasCertificate : true); 
       if (categoryCol > -1) newRow[categoryCol] = data.Category;
       if (mainCatCol > -1) newRow[mainCatCol] = data.MainCategory; 
       if (targetDeptCol > -1) newRow[targetDeptCol] = data.TargetDepartments;
@@ -1384,6 +1390,17 @@ function getDashboardStats(period) {
 
   profiles.forEach(p => {
       const email = String(p.Email).trim().toLowerCase();
+
+      let activePet = null;
+      try {
+          if (p.PetData) {
+              const petData = JSON.parse(p.PetData);
+              if (petData.inventory && petData.inventory.length > 0 && petData.activePetIndex >= 0) {
+                  activePet = petData.inventory[petData.activePetIndex];
+              }
+          }
+      } catch(e) {}
+
       studentMap[email] = {
           email: email,
           fullName: p.FullName || email,
@@ -1393,32 +1410,31 @@ function getDashboardStats(period) {
           jobTitle: p.JobTitle || '', 
           profileImage: p.ProfileImage || '',
           completedSections: [],
-          sectionTimestamps: {}, // JAVIS ADDED: เก็บเวลาดูวิดีโอ
+          sectionTimestamps: {}, 
           scores: {},
-          quizTimestamps: {}, // JAVIS ADDED: เก็บเวลาสอบ
+          quizTimestamps: {}, 
           manualBN: 0, 
           totalBN: 0,  
           lastActive: p.LastUpdate ? new Date(p.LastUpdate) : null,
-          externalProofs: externalProofs.filter(proof => String(proof.Email).trim().toLowerCase() === email)
+          externalProofs: externalProofs.filter(proof => String(proof.Email).trim().toLowerCase() === email),
+          activePet: activePet 
       };
   });
 
-  // JAVIS FIX: คำนวณคะแนน Manual ตรงๆ จากชีต Log ป้องกันบั๊กไม่อัปเดตเมื่อข้ามเดือน
   manualLogs.forEach(m => {
       const email = String(m.Email).trim().toLowerCase();
       if (!studentMap[email]) {
-          studentMap[email] = { email: email, fullName: email, nickname: '-', department: '-', position: '-', jobTitle: '', profileImage: '', completedSections: [], scores: {}, manualBN: 0, totalBN: 0, lastActive: null, externalProofs: [] };
+          studentMap[email] = { email: email, fullName: email, nickname: '-', department: '-', position: '-', jobTitle: '', profileImage: '', completedSections: [], scores: {}, manualBN: 0, totalBN: 0, lastActive: null, externalProofs: [], activePet: null };
       }
       const pts = parseInt(m.Points) || 0;
       studentMap[email].manualBN += pts;
       studentMap[email].totalBN += pts;
   });
 
-  // JAVIS FIX: เรียงให้ดึงข้อมูลล่าสุดขึ้นมาก่อน แก้ปัญหา 0 คะแนนทับคะแนนใหม่
   usersProgress.sort((a, b) => new Date(b.Timestamp || 0) - new Date(a.Timestamp || 0)).forEach(p => {
       const email = String(p.Email).trim().toLowerCase();
       if(!studentMap[email]) {
-          studentMap[email] = { email: email, fullName: email, nickname: '-', department: '-', position: '-', jobTitle: '', profileImage: '', completedSections: [], sectionTimestamps: {}, scores: {}, quizTimestamps: {}, manualBN: 0, totalBN: 0, lastActive: null, externalProofs: externalProofs.filter(proof => String(proof.Email).trim().toLowerCase() === email) };
+          studentMap[email] = { email: email, fullName: email, nickname: '-', department: '-', position: '-', jobTitle: '', profileImage: '', completedSections: [], sectionTimestamps: {}, scores: {}, quizTimestamps: {}, manualBN: 0, totalBN: 0, lastActive: null, externalProofs: externalProofs.filter(proof => String(proof.Email).trim().toLowerCase() === email), activePet: null };
       }
       
       let t = p.Timestamp;
@@ -1426,7 +1442,7 @@ function getDashboardStats(period) {
 
       if (sectionMap[p.SectionID] && !studentMap[email].completedSections.includes(p.SectionID)) {
           studentMap[email].completedSections.push(p.SectionID);
-          studentMap[email].sectionTimestamps[p.SectionID] = t; // JAVIS ADDED
+          studentMap[email].sectionTimestamps[p.SectionID] = t; 
           let earned = (p.EarnedBN !== undefined && p.EarnedBN !== '' && !(p.EarnedBN instanceof Date)) ? parseInt(p.EarnedBN) : (sectionMap[p.SectionID] ? sectionMap[p.SectionID].vp : 0);
           studentMap[email].totalBN += earned; 
       }
@@ -1435,11 +1451,10 @@ function getDashboardStats(period) {
       }
   });
 
-  // JAVIS FIX: เรียงให้ดึงข้อมูลล่าสุดขึ้นมาก่อน
   scores.sort((a, b) => new Date(b.Timestamp || 0) - new Date(a.Timestamp || 0)).forEach(s => {
       const email = String(s.Email).trim().toLowerCase();
       if(!studentMap[email]) {
-          studentMap[email] = { email: email, fullName: email, nickname: '-', department: '-', position: '-', jobTitle: '', profileImage: '', completedSections: [], sectionTimestamps: {}, scores: {}, quizTimestamps: {}, manualBN: 0, totalBN: 0, lastActive: null, externalProofs: externalProofs.filter(proof => String(proof.Email).trim().toLowerCase() === email) };
+          studentMap[email] = { email: email, fullName: email, nickname: '-', department: '-', position: '-', jobTitle: '', profileImage: '', completedSections: [], sectionTimestamps: {}, scores: {}, quizTimestamps: {}, manualBN: 0, totalBN: 0, lastActive: null, externalProofs: externalProofs.filter(proof => String(proof.Email).trim().toLowerCase() === email), activePet: null };
       }
       
       let t = s.Timestamp;
@@ -1448,17 +1463,17 @@ function getDashboardStats(period) {
       if (sectionMap[s.SectionID]) {
           const percent = s.TotalQuestions > 0 ? (s.Score / s.TotalQuestions) : 0;
           
-          if (percent >= 0.5) {
+          if (percent >= 0.8) { // JAVIS FIX: อัปเดตเกณฑ์ผ่านเป็น 80% (0.8)
              if (!studentMap[email].scores[s.SectionID]) {
                  studentMap[email].scores[s.SectionID] = percent;
-                 studentMap[email].quizTimestamps[s.SectionID] = t; // JAVIS ADDED
+                 studentMap[email].quizTimestamps[s.SectionID] = t; 
                  let earned = (s.EarnedBN !== undefined && s.EarnedBN !== '' && !(s.EarnedBN instanceof Date)) ? parseInt(s.EarnedBN) : (sectionMap[s.SectionID] ? sectionMap[s.SectionID].qp : 0);
                  studentMap[email].totalBN += earned; 
              }
           } else {
              if (!studentMap[email].scores[s.SectionID]) {
                  studentMap[email].scores[s.SectionID] = percent; 
-                 studentMap[email].quizTimestamps[s.SectionID] = t; // JAVIS ADDED
+                 studentMap[email].quizTimestamps[s.SectionID] = t; 
              }
           }
       }
@@ -1468,9 +1483,6 @@ function getDashboardStats(period) {
       }
   });
 
-  // ========================================================
-  // JAVIS ADDED: ระบบนับจำนวนผู้เข้าเรียนรายวัน (ตัดรอบ 18:00 น.)
-  // ========================================================
   const dailyActivityMap = {};
 
   function recordDailyActivity(email, timestamp) {
@@ -1478,7 +1490,6 @@ function getDashboardStats(period) {
       let d = new Date(timestamp);
       if (isNaN(d.getTime())) return;
       
-      // เลื่อนเวลาไปข้างหน้า 6 ชั่วโมง เพื่อให้ 18:00 น. กลายเป็นเที่ยงคืน (ตัดเข้าสู่วันใหม่)
       let shiftedDate = new Date(d.getTime() + (6 * 60 * 60 * 1000));
       let dateKey = `${shiftedDate.getFullYear()}-${String(shiftedDate.getMonth() + 1).padStart(2, '0')}-${String(shiftedDate.getDate()).padStart(2, '0')}`;
       
@@ -1488,19 +1499,17 @@ function getDashboardStats(period) {
       dailyActivityMap[dateKey].add(email.trim().toLowerCase());
   }
 
-  // ดึงประวัติทั้งหมดมาหาว่าวันไหนใครมีส่วนร่วมบ้าง (เอาคะแนนแมนวลออก ไม่นับรวม)
   usersProgress.forEach(p => recordDailyActivity(p.Email, p.Timestamp || p.EarnedBN));
   scores.forEach(s => recordDailyActivity(s.Email, s.Timestamp || s.EarnedBN));
   externalProofs.forEach(p => recordDailyActivity(p.Email, p.Timestamp));
-  profiles.forEach(p => recordDailyActivity(p.Email, p.LastUpdate)); // JAVIS ADDED: นับการอัปเดตโปรไฟล์ด้วย
+  profiles.forEach(p => recordDailyActivity(p.Email, p.LastUpdate)); 
 
   const dailyActivityList = Object.keys(dailyActivityMap).map(dateKey => {
       return {
           date: dateKey,
           userCount: dailyActivityMap[dateKey].size
       };
-  }).sort((a, b) => b.date.localeCompare(a.date)); // เรียงจากล่าสุดไปเก่า
-
+  }).sort((a, b) => b.date.localeCompare(a.date)); 
 
   const students = Object.values(studentMap).map(std => {
       std.progressPercent = totalSections > 0 ? Math.round((std.completedSections.length / totalSections) * 100) : 0;
@@ -1530,7 +1539,7 @@ function getDashboardStats(period) {
       totalSections: totalSections,
       totalLessons: lessons.length,
       students: students.sort((a,b) => b.totalBN - a.totalBN),
-      dailyActivity: dailyActivityList // JAVIS ADDED: ส่งข้อมูลสถิติรายวันกลับไปที่หน้าเว็บ
+      dailyActivity: dailyActivityList 
   });
 }
 
@@ -1611,5 +1620,176 @@ function deleteUserAdmin(email) {
     return { status: 'error', message: 'ไม่พบอีเมลนี้ในระบบ' };
   } catch(e) {
     return { status: 'error', message: e.toString() };
+  }
+}
+
+/* ============================================================================
+   [JAVIS ADDED] ระบบหลังบ้านสำหรับสัตว์เลี้ยง (Pet System Backend)
+============================================================================ */
+
+/**
+ * ดึงข้อมูลสัตว์เลี้ยงของผู้ใช้งาน (รับค่า Email โดยตรงจากหน้าเว็บ)
+ */
+function getPetData(clientEmail) {
+  try {
+    const userEmail = String(clientEmail || Session.getActiveUser().getEmail() || '').trim().toLowerCase();
+    if (!userEmail) return { error: 'ไม่พบอีเมลผู้ใช้งาน' };
+
+    const ws = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const usersSheet = ws.getSheetByName(USER_PROFILES_SHEET_NAME);
+    if (!usersSheet) return { error: 'ไม่พบ Sheet UserProfiles' };
+
+    const data = usersSheet.getDataRange().getValues();
+    const headers = data[0];
+    const emailIndex = headers.indexOf('Email');
+    let petDataIndex = headers.indexOf('PetData'); 
+
+    if (emailIndex === -1) return { error: 'ไม่พบคอลัมน์ Email ในชีต UserProfiles' };
+
+    if (petDataIndex === -1) {
+      petDataIndex = headers.length;
+      usersSheet.getRange(1, petDataIndex + 1).setValue('PetData');
+      return null; 
+    }
+
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][emailIndex]).trim().toLowerCase() === userEmail) {
+        const petDataString = data[i][petDataIndex];
+        if (petDataString) {
+          return JSON.parse(petDataString);
+        }
+        return null; 
+      }
+    }
+    return { error: 'ไม่พบข้อมูลผู้ใช้งานนี้ในระบบ' };
+  } catch (error) {
+    console.error("getPetData Error:", error);
+    return { error: error.message };
+  }
+}
+
+/**
+ * บันทึกข้อมูลสัตว์เลี้ยงของผู้ใช้งาน (รับค่า Email โดยตรงจากหน้าเว็บ)
+ */
+function savePetData(clientEmail, petData) {
+  try {
+    const userEmail = String(clientEmail || Session.getActiveUser().getEmail() || '').trim().toLowerCase();
+    if (!userEmail) return { status: 'error', message: 'ไม่พบอีเมลผู้ใช้งาน' };
+
+    const ws = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const usersSheet = ws.getSheetByName(USER_PROFILES_SHEET_NAME);
+    if (!usersSheet) return { status: 'error', message: 'ไม่พบ Sheet UserProfiles' };
+
+    const data = usersSheet.getDataRange().getValues();
+    const headers = data[0];
+    const emailIndex = headers.indexOf('Email');
+    let petDataIndex = headers.indexOf('PetData');
+
+    if (emailIndex === -1) return { status: 'error', message: 'ไม่พบคอลัมน์ Email ในชีต UserProfiles' };
+
+    if (petDataIndex === -1) {
+      petDataIndex = headers.length;
+      usersSheet.getRange(1, petDataIndex + 1).setValue('PetData');
+    }
+
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][emailIndex]).trim().toLowerCase() === userEmail) {
+        usersSheet.getRange(i + 1, petDataIndex + 1).setValue(JSON.stringify(petData));
+        return { status: 'success' };
+      }
+    }
+
+    return { status: 'error', message: 'ไม่พบข้อมูลผู้ใช้งานนี้ในระบบ' };
+  } catch (error) {
+    console.error("savePetData Error:", error);
+    return { status: 'error', message: error.message };
+  }
+}
+
+/**
+ * JAVIS ADDED: บันทึกผลการต่อสู้สัตว์เลี้ยง และหักเลือดเป้าหมาย
+ */
+function executePetBattle(attackerEmail, defenderEmail, isAttackerWin, trapUsed, defenderLogMsg, defenderLogType) {
+  try {
+    const ws = SpreadsheetApp.openById(SPREADSHEET_ID);
+    
+    // 1. บันทึกประวัติให้ฝั่งคนโดนตี (Defender)
+    let logsSheet = ws.getSheetByName('PetBattleLogs');
+    if (!logsSheet) {
+      logsSheet = ws.insertSheet('PetBattleLogs');
+      logsSheet.appendRow(['Timestamp', 'DefenderEmail', 'AttackerEmail', 'LogMessage', 'LogType']);
+    }
+    
+    const now = new Date().toISOString();
+    logsSheet.appendRow([now, String(defenderEmail).trim().toLowerCase(), String(attackerEmail).trim().toLowerCase(), defenderLogMsg, defenderLogType]);
+    
+    // 2. หักลบไอเทม / ลดเลือด ฝั่ง Defender
+    const usersSheet = ws.getSheetByName(USER_PROFILES_SHEET_NAME);
+    const data = usersSheet.getDataRange().getValues();
+    const headers = data[0];
+    const emailIndex = headers.indexOf('Email');
+    const petDataIndex = headers.indexOf('PetData');
+    
+    if (emailIndex === -1 || petDataIndex === -1) return;
+    
+    const defEmailSafe = String(defenderEmail).trim().toLowerCase();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][emailIndex]).trim().toLowerCase() === defEmailSafe) {
+        let petDataStr = data[i][petDataIndex];
+        if (petDataStr) {
+          let pData = JSON.parse(petDataStr);
+          if (pData.inventory && pData.activePetIndex >= 0) {
+              let defPet = pData.inventory[pData.activePetIndex];
+              
+              // ถ้ากับดักทำงาน กับดักจะหายไป (ใช้แล้วทิ้ง)
+              if (trapUsed) {
+                  defPet.trap = null;
+              }
+              // ถ้าฝั่งป้องกันแพ้ (isAttackerWin == true) เลือดลด 40 HP
+              if (defenderLogType === 'lose') {
+                  defPet.health = Math.max(0, (defPet.health || 100) - 40);
+                  defPet.isInjured = true;
+              }
+              
+              usersSheet.getRange(i + 1, petDataIndex + 1).setValue(JSON.stringify(pData));
+          }
+        }
+        break;
+      }
+    }
+    return {status: 'success'};
+  } catch(e) {
+    console.error('executePetBattle Error:', e);
+  }
+}
+
+/**
+ * JAVIS ADDED: ดึงประวัติการถูกโจมตีมาโชว์ในหน้าจอ
+ */
+function getPetBattleLogs(email) {
+  try {
+    const ws = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const logsSheet = ws.getSheetByName('PetBattleLogs');
+    if (!logsSheet) return [];
+    
+    const data = logsSheet.getDataRange().getValues();
+    const emailSafe = String(email).trim().toLowerCase();
+    
+    let userLogs = [];
+    for (let i = data.length - 1; i > 0; i--) { // ดึงจากล่างขึ้นบน (ใหม่สุดอยู่บน)
+      if (String(data[i][1]).trim().toLowerCase() === emailSafe) {
+        userLogs.push({
+          timestamp: data[i][0],
+          attacker: data[i][2],
+          message: data[i][3],
+          type: data[i][4] // 'win', 'lose', 'defense'
+        });
+      }
+      if (userLogs.length >= 20) break; // โชว์แค่ 20 ประวัติล่าสุด
+    }
+    return userLogs;
+  } catch(e) {
+    console.error('getPetBattleLogs Error:', e);
+    return [];
   }
 }
