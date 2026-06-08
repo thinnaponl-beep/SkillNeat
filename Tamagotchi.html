@@ -20,9 +20,9 @@
         bottom: 35%; left: 50%; margin-left: -0.9rem;
     }
 
-    /* JAVIS FIX: ปรับแต่งให้ตัวการ์ตูน 3D เกลี่ยสีให้เนียนขึ้นเมื่อขยาย */
+    /* JAVIS FIX: ปรับแต่งให้ตัวการ์ตูนขยับได้ เกลี่ยสีให้สมูทเนียนขึ้นเมื่อขยาย ไม่แตกเป็นพิกเซลขรุขระ */
     img[src*="PokeAPI"] {
-        image-rendering: auto; /* ทำให้ภาพเนียนและลดความขรุขระของพิกเซล */
+        image-rendering: auto; 
     }
 
     /* Battle Animations */
@@ -61,7 +61,7 @@
     <div class="bg-white rounded-[2rem] w-[95vw] max-w-6xl shadow-2xl flex flex-col transform scale-95 transition-transform duration-300 [&:not(.hidden)]:scale-100 overflow-hidden relative">
         
         <!-- Header -->
-        <div class="bg-gradient-to-r from-[#31c1d7] to-[#1eb0c6] px-6 py-4 text-white flex justify-between items-center shadow-sm relative z-10">
+        <div class="bg-gradient-to-r from-[#31c1d7] to-[#1eb0c6] px-6 py-4 text-white flex justify-between items-center shadow-sm relative z-10 w-full">
             <div class="flex items-center gap-3">
                 <span class="text-2xl">🏕️</span>
                 <div>
@@ -72,12 +72,12 @@
             <button type="button" onclick="closePetModal()" class="text-white/80 hover:text-white bg-white/10 hover:bg-white/30 rounded-full w-8 h-8 flex items-center justify-center font-bold text-xl transition-colors">&times;</button>
         </div>
         
-        <!-- 1. ศูนย์รับเลี้ยง (Adoption Screen) -->
+        <!-- 1. ร้านค้า (Adoption Screen) -->
         <div id="pet-selection-screen" class="p-6 md:p-8 bg-slate-50 flex flex-col items-center w-full max-h-[85vh] overflow-y-auto custom-scrollbar hidden">
             <div class="w-full max-w-5xl mb-6 flex items-center gap-3 bg-white p-4 rounded-2xl shadow-sm border border-slate-100" id="adoption-header-container">
                 <button id="adoption-back-btn" onclick="currentPetScreen = 'inventory'; renderPetUI();" class="p-2 bg-slate-100 text-slate-500 hover:bg-slate-200 rounded-full transition-colors hidden"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg></button>
                 <div>
-                    <h4 class="text-xl font-black text-slate-800">✨ ศูนย์รับเลี้ยง (Pet Shop)</h4>
+                    <h4 class="text-xl font-black text-slate-800">✨ ร้านค้า (Pet Shop)</h4>
                     <p class="text-[11px] text-slate-500 font-medium" id="adoption-subtitle">สัตว์เลี้ยงตัวแรก รับเลี้ยงฟรี!</p>
                 </div>
                 <div class="ml-auto bg-amber-50 border border-amber-200 text-amber-600 px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm">
@@ -85,9 +85,7 @@
                 </div>
             </div>
             
-            <div class="flex flex-wrap justify-center gap-6 w-full max-w-5xl">
-                <div id="pet-selection-grid" class="contents"></div>
-            </div>
+            <div class="flex flex-wrap justify-center gap-6 w-full max-w-5xl" id="pet-selection-grid"></div>
         </div>
 
         <!-- 2. กระเป๋าสัตว์เลี้ยง (Inventory Screen) -->
@@ -100,11 +98,11 @@
                         <p class="text-[11px] text-slate-500 font-medium">สลับตัวใช้งานหรือรับเลี้ยงเพิ่มได้ที่นี่</p>
                     </div>
                 </div>
-                <button onclick="currentPetScreen = 'adoption'; renderPetUI();" class="px-4 py-2 bg-amber-500 text-white text-xs sm:text-sm font-bold rounded-xl shadow-sm hover:bg-amber-600 transition-all flex items-center gap-1">
+                <button onclick="currentPetScreen = 'adoption'; renderPetUI();" class="px-4 py-2 bg-amber-500 text-white text-xs sm:text-sm font-bold rounded-xl shadow-sm hover:bg-amber-600 transition-all flex items-center gap-1 flex-shrink-0">
                     <span class="hidden sm:inline">➕ รับเลี้ยงตัวใหม่</span><span class="sm:hidden">➕ รับเลี้ยง</span>
                 </button>
             </div>
-            <div class="flex flex-wrap justify-center gap-6 w-full max-w-5xl" id="pet-inventory-grid"></div>
+            <div class="flex flex-wrap justify-center gap-4 sm:gap-6 w-full max-w-5xl" id="pet-inventory-grid"></div>
         </div>
 
         <!-- 3. หน้าจอเลี้ยงสัตว์ (Active Pet Screen) -->
@@ -126,7 +124,7 @@
                         <span class="text-xl font-black flex items-center gap-1.5"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg><span id="pet-cp-display">100</span></span>
                     </div>
                     <!-- ไอเทมป้องกัน/สถานะ -->
-                    <div id="pet-trap-status" class="mt-2 flex flex-col gap-1 items-end"></div>
+                    <div id="pet-trap-status" class="mt-2 flex flex-col gap-1 items-end w-full"></div>
                 </div>
 
                 <!-- ป้ายชื่อและธาตุ -->
@@ -149,23 +147,23 @@
                     </div>
                 </div>
 
-                <div id="pet-level-badge" class="absolute bottom-6 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-lg font-black px-10 py-2.5 rounded-full shadow-lg border-2 border-white z-10 transition-all transform hover:scale-105">Lv. 1</div>
+                <div id="pet-level-badge" class="absolute bottom-6 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-lg font-black px-10 py-2.5 rounded-full shadow-lg border-2 border-white z-10 transition-all transform hover:scale-105 flex-shrink-0">Lv. 1</div>
             </div>
 
             <!-- ด้านขวา: สถานะ และ ร้านอาหาร / ไอเทม -->
             <div class="w-full md:w-1/2 p-6 md:p-8 bg-white flex flex-col md:overflow-y-auto custom-scrollbar relative">
                 
                 <!-- ลานประลอง: ปุ่มดูประวัติถูกตี และค้นหาคู่ต่อสู้ -->
-                <div class="absolute top-4 right-4 flex gap-2 z-10">
-                    <button onclick="openOpponentSearch()" class="bg-gradient-to-r from-rose-500 to-red-600 hover:from-red-600 hover:to-rose-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-md border border-red-400 transform hover:-translate-y-0.5">
+                <div class="absolute top-4 right-4 flex gap-2 z-10 flex-wrap justify-end">
+                    <button onclick="openOpponentSearch()" class="bg-gradient-to-r from-rose-500 to-red-600 hover:from-red-600 hover:to-rose-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-md border border-red-400 transform hover:-translate-y-0.5 flex-shrink-0">
                         <span class="text-sm drop-shadow-sm">⚔️</span> ค้นหาคู่ต่อสู้
                     </button>
-                    <button onclick="openBattleLog()" class="bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm border border-slate-200 transform hover:-translate-y-0.5">
+                    <button onclick="openBattleLog()" class="bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm border border-slate-200 transform hover:-translate-y-0.5 flex-shrink-0">
                         <span class="text-sm">📜</span> ประวัติลานประลอง
                     </button>
                 </div>
 
-                <div class="mb-8 bg-slate-50 p-5 rounded-2xl border border-slate-100 shadow-sm mt-8 md:mt-6">
+                <div class="mb-8 bg-slate-50 p-5 rounded-2xl border border-slate-100 shadow-sm mt-12 md:mt-6">
                     <h4 class="font-bold text-slate-800 text-sm mb-4">📊 สถานะปัจจุบัน</h4>
                     <div id="pet-health-container" class="w-full mb-5">
                         <div class="flex justify-between text-[11px] font-bold text-rose-500 mb-1.5 px-1">
@@ -189,55 +187,55 @@
                     </div>
                 </div>
 
-                <div class="flex-grow">
+                <div class="flex-grow w-full">
                     <div class="flex justify-between items-center mb-4">
                         <h4 class="font-bold text-slate-800 text-sm">🛒 ร้านอาหาร (Pet Shop)</h4>
-                        <div class="bg-amber-50 border border-amber-200 text-amber-600 px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm">
+                        <div class="bg-amber-50 border border-amber-200 text-amber-600 px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm flex-shrink-0">
                             <span class="text-sm">🪙</span> <span id="spendable-bn-display">0</span> BN
                         </div>
                     </div>
                     
-                    <div class="grid grid-cols-2 gap-3 mb-6">
-                        <button onclick="feedPet(0, 100, 100)" class="flex flex-col items-center justify-center p-3 bg-white border border-slate-200 hover:border-pink-400 hover:bg-pink-50 hover:shadow-md rounded-2xl transition-all group">
+                    <div class="grid grid-cols-2 gap-3 mb-6 w-full">
+                        <button onclick="feedPet(0, 50, 100)" class="flex flex-col items-center justify-center p-3 bg-white border border-slate-200 hover:border-pink-400 hover:bg-pink-50 hover:shadow-md rounded-2xl transition-all group w-full">
                             <span class="text-3xl mb-1 group-hover:scale-110 transition-transform drop-shadow-sm">🧪</span>
-                            <span class="text-[11px] font-black text-pink-600 text-center">ยาฟื้นพละกำลัง<br>(ฟื้นเลือดเต็ม 100)</span>
-                            <span class="text-[10px] font-bold text-slate-500 mt-1.5 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">100 BN</span>
+                            <span class="text-[11px] font-black text-pink-600 text-center line-clamp-2">ยาฟื้นกำลัง<br>(เลือดเต็ม)</span>
+                            <span class="text-[10px] font-bold text-slate-500 mt-1.5 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">50 BN</span>
                         </button>
-                        <button onclick="feedPet(25, 20, 30)" class="flex flex-col items-center justify-center p-3 bg-white border border-slate-200 hover:border-emerald-400 hover:bg-emerald-50 hover:shadow-md rounded-2xl transition-all group">
+                        <button onclick="feedPet(25, 100, 30)" class="flex flex-col items-center justify-center p-3 bg-white border border-slate-200 hover:border-emerald-400 hover:bg-emerald-50 hover:shadow-md rounded-2xl transition-all group w-full">
                             <span class="text-3xl mb-1 group-hover:scale-110 transition-transform drop-shadow-sm">🍖</span>
                             <span class="text-[11px] font-black text-emerald-600">+25 EXP</span>
-                            <span class="text-[10px] font-bold text-slate-500 mt-1.5 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">20 BN</span>
+                            <span class="text-[10px] font-bold text-slate-500 mt-1.5 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">100 BN</span>
                         </button>
-                        <button onclick="feedPet(100, 80, 50)" class="flex flex-col items-center justify-center p-3 bg-white border border-slate-200 hover:border-amber-400 hover:bg-amber-50 hover:shadow-md rounded-2xl transition-all group">
+                        <button onclick="feedPet(100, 300, 50)" class="flex flex-col items-center justify-center p-3 bg-white border border-slate-200 hover:border-amber-400 hover:bg-amber-50 hover:shadow-md rounded-2xl transition-all group w-full">
                             <span class="text-3xl mb-1 group-hover:scale-110 transition-transform drop-shadow-sm">🍰</span>
                             <span class="text-[11px] font-black text-amber-600">+100 EXP</span>
-                            <span class="text-[10px] font-bold text-slate-500 mt-1.5 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">80 BN</span>
+                            <span class="text-[10px] font-bold text-slate-500 mt-1.5 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">300 BN</span>
                         </button>
-                        <button onclick="feedPet(350, 300, 100)" class="flex flex-col items-center justify-center p-3 bg-white border border-slate-200 hover:border-violet-400 hover:bg-violet-50 hover:shadow-md rounded-2xl transition-all group relative overflow-hidden">
+                        <button onclick="feedPet(350, 1000, 100)" class="flex flex-col items-center justify-center p-3 bg-white border border-slate-200 hover:border-violet-400 hover:bg-violet-50 hover:shadow-md rounded-2xl transition-all group relative overflow-hidden w-full">
                             <div class="absolute -right-4 -top-4 w-12 h-12 bg-violet-100 rounded-full blur-xl"></div>
                             <span class="text-3xl mb-1 group-hover:scale-110 transition-transform drop-shadow-sm relative z-10">🍱</span>
                             <span class="text-[11px] font-black text-violet-600 relative z-10">+350 EXP</span>
-                            <span class="text-[10px] font-bold text-slate-500 mt-1.5 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100 relative z-10">300 BN</span>
+                            <span class="text-[10px] font-bold text-slate-500 mt-1.5 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100 relative z-10">1000 BN</span>
                         </button>
                     </div>
 
                     <!-- หมวดไอเทมลับ -->
                     <h4 class="font-bold text-slate-800 text-sm mb-3">🛡️ ไอเทมป้องกันลานประลอง (สวมใส่ได้ 1 ชิ้น)</h4>
                     <div class="grid grid-cols-3 gap-3 pb-4">
-                        <button onclick="buyTrap('shield', 120)" class="flex flex-col items-center justify-center py-3 px-2 bg-white border border-slate-200 hover:border-blue-400 hover:bg-blue-50 hover:shadow-md rounded-xl transition-all group">
+                        <button onclick="buyTrap('shield', 150)" class="flex flex-col items-center justify-center py-3 px-2 bg-white border border-slate-200 hover:border-blue-400 hover:bg-blue-50 hover:shadow-md rounded-xl transition-all group">
                             <span class="text-2xl mb-1 group-hover:scale-110 transition-transform drop-shadow-sm">🛡️</span>
                             <span class="text-[9px] font-black text-blue-600">โล่บาเรีย<br>(กันตี 100%)</span>
-                            <span class="text-[9px] font-bold text-slate-500 mt-1 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">120 BN</span>
+                            <span class="text-[9px] font-bold text-slate-500 mt-1 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">150 BN</span>
                         </button>
-                        <button onclick="buyTrap('banana', 80)" class="flex flex-col items-center justify-center py-3 px-2 bg-white border border-slate-200 hover:border-yellow-400 hover:bg-yellow-50 hover:shadow-md rounded-xl transition-all group">
+                        <button onclick="buyTrap('banana', 200)" class="flex flex-col items-center justify-center py-3 px-2 bg-white border border-slate-200 hover:border-yellow-400 hover:bg-yellow-50 hover:shadow-md rounded-xl transition-all group">
                             <span class="text-2xl mb-1 group-hover:scale-110 transition-transform drop-shadow-sm">🍌</span>
                             <span class="text-[9px] font-black text-yellow-600">เปลือกกล้วย<br>(ทำให้ศัตรูมึน)</span>
-                            <span class="text-[9px] font-bold text-slate-500 mt-1 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">80 BN</span>
+                            <span class="text-[9px] font-bold text-slate-500 mt-1 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">200 BN</span>
                         </button>
-                        <button onclick="buyTrap('reflect', 222)" class="flex flex-col items-center justify-center py-3 px-2 bg-white border border-slate-200 hover:border-fuchsia-400 hover:bg-fuchsia-50 hover:shadow-md rounded-xl transition-all group">
+                        <button onclick="buyTrap('reflect', 300)" class="flex flex-col items-center justify-center py-3 px-2 bg-white border border-slate-200 hover:border-fuchsia-400 hover:bg-fuchsia-50 hover:shadow-md rounded-xl transition-all group">
                             <span class="text-2xl mb-1 group-hover:scale-110 transition-transform drop-shadow-sm">🪞</span>
                             <span class="text-[9px] font-black text-fuchsia-600">กระจกสะท้อน<br>(สะท้อนแพ้)</span>
-                            <span class="text-[9px] font-bold text-slate-500 mt-1 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">222 BN</span>
+                            <span class="text-[9px] font-bold text-slate-500 mt-1 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">300 BN</span>
                         </button>
                     </div>
 
@@ -289,8 +287,82 @@
     </div>
 </div>
 
+<!-- JAVIS ADDED: Pokedex Card Modal (ดีไซน์ React Pokedex แบบในภาพตัวอย่าง) -->
+<div id="pokedex-card-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-md hidden z-[500] flex justify-center items-end sm:items-center p-0 sm:p-4 transition-opacity duration-300 opacity-0">
+    <div id="pokedex-card-box" class="w-full sm:max-w-md bg-white rounded-t-[3rem] sm:rounded-[3rem] shadow-2xl flex flex-col transform translate-y-full sm:translate-y-0 sm:scale-90 transition-all duration-300 relative max-h-[95vh] sm:max-h-[90vh]">
+        <!-- Colored Header with Pokeball BG -->
+        <div id="pokedex-card-header" class="relative h-48 sm:h-56 p-6 flex-shrink-0 transition-colors duration-500 rounded-t-[3rem] sm:rounded-t-[3rem] overflow-hidden">
+            <!-- Pokeball watermark -->
+            <div class="absolute -bottom-12 -right-8 opacity-20 pointer-events-none">
+                <svg width="200" height="200" viewBox="0 0 200 200" fill="white">
+                    <path d="M100,0 C44.8,0 0,44.8 0,100 C0,155.2 44.8,200 100,200 C155.2,200 200,155.2 200,100 C200,44.8 155.2,0 100,0 Z M100,180 C55.9,180 20,144.1 20,100 C20,55.9 55.9,20 100,20 C144.1,20 180,55.9 180,100 C180,144.1 144.1,180 100,180 Z M100,60 C77.9,60 60,77.9 60,100 C60,122.1 77.9,140 100,140 C122.1,140 140,122.1 140,100 C140,77.9 122.1,60 100,60 Z M100,120 C89,120 80,111 80,100 C80,89 89,80 100,80 C111,80 120,89 120,100 C120,111 111,120 100,120 Z"/>
+                </svg>
+            </div>
+            
+            <button onclick="closePokedexCard()" class="absolute top-6 left-6 text-white bg-black/20 hover:bg-black/40 rounded-full w-10 h-10 flex items-center justify-center font-bold text-xl backdrop-blur-sm transition-all z-30">&larr;</button>
+            <div class="absolute top-6 right-6 text-white/50 font-black text-4xl italic z-10" id="pokedex-card-id">#001</div>
+            
+            <div class="absolute bottom-16 left-6 z-30">
+                <h2 id="pokedex-card-name" class="text-3xl font-black text-white drop-shadow-md mb-2">Name</h2>
+                <span id="pokedex-card-element" class="bg-white/30 text-white px-3 py-1 rounded-full text-sm font-bold backdrop-blur-sm shadow-sm border border-white/40">Element</span>
+            </div>
+        </div>
+        
+        <!-- JAVIS FIX: แก้ไขโครงสร้าง HTML บริเวณนี้เพื่อแยกส่วนรูปภาพไม่ให้โดนตัดขอบด้วย overflow -->
+        <!-- White Content Area Wrapper -->
+        <div class="bg-white flex-grow flex flex-col relative z-20 sm:rounded-b-[3rem] -mt-10 pt-8">
+            <!-- Floating Image (Outside overflow area to prevent clipping) -->
+            <!-- JAVIS FIX: ปรับ -translate-y ให้ขยับรูปขึ้นไปอีก เพื่อไม่ให้บังข้อความ Tab ด้านล่าง -->
+            <div class="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-[65%] sm:-translate-y-[70%] z-40 flex justify-center w-full pointer-events-none mt-4">
+                <img id="pokedex-card-img" src="" class="h-32 sm:h-40 object-contain drop-shadow-2xl image-rendering-auto">
+            </div>
+
+            <!-- Scrollable Content -->
+            <div class="flex-grow overflow-y-auto custom-scrollbar px-6 pb-6 pt-8">
+                <!-- Tabs -->
+                <div class="flex border-b border-slate-100 mb-6 w-full text-center">
+                    <button class="flex-1 pb-3 text-sm font-black border-b-[3px] border-[#31c1d7] text-slate-800">ข้อมูล & สเตตัส (Base Stats)</button>
+                </div>
+                
+                <div class="space-y-6 flex-grow">
+                    <!-- Base Stats -->
+                    <div>
+                        <div class="flex items-center text-sm mb-3">
+                            <span class="w-28 font-bold text-slate-500">Combat Power</span>
+                            <span class="w-10 font-black text-slate-800 text-right" id="pokedex-card-cp">80</span>
+                            <div class="ml-3 flex-grow bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                                <div id="pokedex-card-cp-bar" class="bg-[#31c1d7] h-full rounded-full transition-all duration-1000" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div class="flex items-center text-sm">
+                            <span class="w-28 font-bold text-slate-500">ราคา (Price)</span>
+                            <span class="w-10 font-black text-amber-500 text-right" id="pokedex-card-price">300</span>
+                            <div class="ml-3 flex-grow bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                                <div id="pokedex-card-price-bar" class="bg-amber-400 h-full rounded-full transition-all duration-1000" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Evolution Chain -->
+                    <div>
+                        <h3 class="text-xs font-bold text-slate-400 mb-3 uppercase tracking-wider">Evolution Chain</h3>
+                        <div id="pokedex-card-evolutions" class="flex items-center justify-between bg-slate-50 p-4 rounded-2xl border border-slate-100 overflow-x-auto gap-2 custom-scrollbar">
+                            <!-- Evolve items injected here -->
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Action Button -->
+                <button id="pokedex-card-buy-btn" class="mt-6 w-full py-4 bg-slate-800 text-white font-black rounded-2xl shadow-lg hover:bg-slate-900 transition-all flex justify-center items-center gap-2 text-lg transform hover:-translate-y-1">
+                    รับเลี้ยงเลย! <span id="pokedex-card-buy-price" class="text-amber-400 bg-slate-700 px-2 py-0.5 rounded-lg ml-1 shadow-inner border border-slate-600">🪙 300 BN</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Naming Custom Modal -->
-<div id="pet-naming-modal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-md hidden z-[400] flex justify-center items-center p-4 transition-opacity duration-300 opacity-0">
+<div id="pet-naming-modal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-md hidden z-[600] flex justify-center items-center p-4 transition-opacity duration-300 opacity-0">
     <div id="pet-naming-box" class="bg-white rounded-[2rem] w-full max-w-sm shadow-2xl p-8 text-center transform scale-90 transition-all duration-300 ease-out opacity-0">
         <div class="w-20 h-20 rounded-full mx-auto flex items-center justify-center mb-5 shadow-inner bg-gradient-to-br from-amber-100 to-amber-50 text-amber-500 text-4xl border-4 border-white">
             <span class="drop-shadow-sm">🏷️</span>
@@ -318,7 +390,7 @@
             <button onclick="closeBattleLog()" class="text-white/70 hover:text-white bg-white/10 hover:bg-white/30 rounded-full w-8 h-8 flex items-center justify-center transition-colors">&times;</button>
         </div>
         <!-- Content -->
-        <div class="p-6 overflow-y-auto custom-scrollbar flex-grow bg-slate-50" id="pet-battlelog-content">
+        <div class="p-6 overflow-y-auto custom-scrollbar flex-grow bg-slate-50 w-full" id="pet-battlelog-content">
             <!-- ข้อมูลจะถูก render ที่นี่ -->
         </div>
     </div>
@@ -328,7 +400,7 @@
 <div id="pet-opponent-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-md hidden z-[400] flex justify-center items-center p-4 transition-opacity duration-300 opacity-0">
     <div id="pet-opponent-box" class="bg-white rounded-[2rem] w-full max-w-4xl shadow-2xl overflow-hidden transform scale-90 transition-all duration-300 flex flex-col max-h-[85vh]">
         <!-- Header -->
-        <div class="bg-gradient-to-r from-rose-500 to-red-600 px-6 py-5 flex justify-between items-center relative z-10 text-white">
+        <div class="bg-gradient-to-r from-rose-500 to-red-600 px-6 py-5 flex justify-between items-center relative z-10 text-white w-full">
             <div>
                 <h3 class="text-xl sm:text-2xl font-black flex items-center gap-2">⚔️ ลานประลอง (Arena)</h3>
                 <p class="text-xs font-medium opacity-90">ค้นหาและท้าประลองกับคู่หูของเพื่อนร่วมงาน!</p>
@@ -336,15 +408,15 @@
             <button onclick="closeOpponentSearch()" class="text-white/70 hover:text-white bg-black/20 hover:bg-black/40 rounded-full w-8 h-8 flex items-center justify-center transition-colors backdrop-blur-sm">&times;</button>
         </div>
         <!-- Search Bar -->
-        <div class="p-4 bg-slate-50 border-b border-slate-200">
+        <div class="p-4 bg-slate-50 border-b border-slate-200 w-full">
             <div class="relative">
                 <input type="text" id="opponent-search-input" onkeyup="filterOpponents()" placeholder="พิมพ์ชื่อ, แผนก หรือชื่อสัตว์เลี้ยง เพื่อค้นหาเป้าหมาย..." class="w-full pl-10 pr-4 py-3 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100 transition-all shadow-inner">
                 <span class="absolute left-3.5 top-3.5 text-slate-400">🔍</span>
             </div>
         </div>
         <!-- Content/Grid -->
-        <div class="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-grow bg-slate-100">
-            <div id="opponent-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div class="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-grow bg-slate-100 w-full">
+            <div id="opponent-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 w-full">
                 <!-- Data will be rendered here -->
             </div>
         </div>
@@ -352,20 +424,22 @@
 </div>
 
 <script>
-// JAVIS REFACTORED: โมเดล 3D แบบเรียบเนียนเคลื่อนไหวได้
 const POKE_URL = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/';
 const POKE_SHINY_URL = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/shiny/';
 
 const ELEMENTS = {
-    'fire': { name: 'ไฟ', icon: '🔥', beats: ['grass'], weak: ['water'] },
+    'fire': { name: 'ไฟ', icon: '🔥', beats: ['grass', 'steel'], weak: ['water'] },
     'water': { name: 'น้ำ', icon: '💧', beats: ['fire'], weak: ['electric', 'grass'] },
     'grass': { name: 'พืช', icon: '🍃', beats: ['water'], weak: ['fire'] },
     'electric': { name: 'ไฟฟ้า', icon: '⚡', beats: ['water', 'wind'], weak: [] },
     'wind': { name: 'ลม', icon: '🌪️', beats: ['grass'], weak: ['electric'] },
-    'ghost': { name: 'ผี', icon: '👻', beats: ['normal'], weak: [] },
-    'normal': { name: 'ทั่วไป', icon: '⭐', beats: [], weak: ['ghost'] }
+    'ghost': { name: 'ผี', icon: '👻', beats: ['normal', 'psychic'], weak: ['dark'] },
+    'psychic': { name: 'มายา', icon: '🔮', beats: ['normal', 'fighting'], weak: ['ghost', 'dark'] },
+    'normal': { name: 'ทั่วไป', icon: '⭐', beats: [], weak: ['ghost', 'fighting'] },
+    'dragon': { name: 'มังกร', icon: '🐉', beats: ['dragon'], weak: ['fairy'] }
 };
 
+// JAVIS FIX: แก้ไขลิงก์รูปภาพของโปเกมอน 5 ตัวสุดท้าย ให้เป็นรหัส ID แทนการใช้ชื่อ เพื่อให้ดึงรูปได้ถูกต้องและไม่ไปตกที่รูปรอง (1.gif)
 const PET_EVOLUTIONS = {
     'bird': {
         name: '🦅 นกสายลม', price: 300, baseCP: 80, element: 'wind', bgGradient: 'from-sky-100 to-blue-200', bgUrl: 'https://images.unsplash.com/photo-1513002749550-c59d786b8e6c?auto=format&fit=crop&w=800&q=80',
@@ -399,6 +473,10 @@ const PET_EVOLUTIONS = {
         name: '🐇 กระต่ายวารี', price: 800, baseCP: 140, element: 'water', bgGradient: 'from-blue-50 to-sky-200', bgUrl: 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=800&q=80',
         stages: [ { minLevel: 1, stageName: 'เบบี้กระต่าย', url: POKE_URL + '298.gif', scale: 'scale-[1.2] md:scale-[1.5]' }, { minLevel: 3, stageName: 'กระต่ายน้ำ', url: POKE_URL + '183.gif', scale: 'scale-[1.5] md:scale-[1.75]' }, { minLevel: 7, stageName: 'กระต่ายพลังช้าง', url: POKE_URL + '184.gif', scale: 'scale-[1.75] md:scale-[2]' }, { minLevel: 15, stageName: 'กระต่ายสีทอง', url: POKE_SHINY_URL + '184.gif', scale: 'scale-[2] md:scale-[2.2]' } ]
     },
+    'chikorita': {
+        name: '🌿 ไดโนเสาร์พืช', price: 800, baseCP: 120, element: 'grass', bgGradient: 'from-green-200 to-emerald-400', bgUrl: 'https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=800&q=80',
+        stages: [ { minLevel: 1, stageName: 'เบบี้ใบไม้', url: POKE_URL + '152.gif', scale: 'scale-[1.2] md:scale-[1.5]' }, { minLevel: 4, stageName: 'ไดโนหญ้า', url: POKE_URL + '153.gif', scale: 'scale-[1.5] md:scale-[1.75]' }, { minLevel: 10, stageName: 'จ้าวป่า', url: POKE_URL + '154.gif', scale: 'scale-[1.75] md:scale-[2]' }, { minLevel: 18, stageName: 'เทพพฤกษา', url: POKE_SHINY_URL + '154.gif', scale: 'scale-[2] md:scale-[2.2]' } ]
+    },
     'cat': {
         name: '🐱 เหมียวนำโชค', price: 900, baseCP: 130, element: 'normal', bgGradient: 'from-yellow-50 to-amber-200', bgUrl: 'https://images.unsplash.com/photo-1513360371669-4adf3dd7dff8?auto=format&fit=crop&w=800&q=80',
         stages: [ { minLevel: 1, stageName: 'ลูกแมว', url: POKE_URL + '52.gif', scale: 'scale-[1.2] md:scale-[1.5]' }, { minLevel: 3, stageName: 'เหมียวหรูหรา', url: POKE_URL + '53.gif', scale: 'scale-[1.5] md:scale-[1.75]' }, { minLevel: 7, stageName: 'เหมียวนำโชค', url: POKE_SHINY_URL + '52.gif', scale: 'scale-[1.75] md:scale-[2]' }, { minLevel: 15, stageName: 'พญาเหมียว', url: POKE_SHINY_URL + '53.gif', scale: 'scale-[2] md:scale-[2.2]' } ]
@@ -412,8 +490,28 @@ const PET_EVOLUTIONS = {
         stages: [ { minLevel: 1, stageName: 'อีวุยน้อย', url: POKE_URL + '133.gif', scale: 'scale-[1.2] md:scale-[1.5]' }, { minLevel: 3, stageName: 'ร่างวารี', url: POKE_URL + '134.gif', scale: 'scale-[1.5] md:scale-[1.75]' }, { minLevel: 7, stageName: 'ร่างสายฟ้า', url: POKE_URL + '135.gif', scale: 'scale-[1.75] md:scale-[2]' }, { minLevel: 15, stageName: 'ร่างอัคคี', url: POKE_URL + '136.gif', scale: 'scale-[2] md:scale-[2.5]' } ]
     },
     'ghost': {
-        name: '👻 ผีน้อยน่ารัก', price: 1500, baseCP: 180, element: 'ghost', bgGradient: 'from-purple-200 to-fuchsia-300', bgUrl: 'https://images.unsplash.com/photo-1508344928928-7137b2f638be?auto=format&fit=crop&w=800&q=80',
+        name: '👻 ผีน้อยน่ารัก', price: 1300, baseCP: 180, element: 'ghost', bgGradient: 'from-purple-200 to-fuchsia-300', bgUrl: 'https://images.unsplash.com/photo-1508344928928-7137b2f638be?auto=format&fit=crop&w=800&q=80',
         stages: [ { minLevel: 1, stageName: 'วิญญาณเร่ร่อน', url: POKE_URL + '92.gif', scale: 'scale-[1.2] md:scale-[1.5]' }, { minLevel: 3, stageName: 'ผีขี้แกล้ง', url: POKE_URL + '93.gif', scale: 'scale-[1.5] md:scale-[1.75]' }, { minLevel: 7, stageName: 'ปีศาจเงา', url: POKE_URL + '94.gif', scale: 'scale-[1.75] md:scale-[2]' }, { minLevel: 15, stageName: 'ร่างสมบูรณ์แบบ', url: POKE_SHINY_URL + '94.gif', scale: 'scale-[2] md:scale-[2.5]' } ]
+    },
+    'mewtwo': {
+        name: '🧠 จ้าวพลังจิต', price: 1400, baseCP: 280, element: 'psychic', bgGradient: 'from-purple-300 to-indigo-400', bgUrl: 'https://images.unsplash.com/photo-1519608487953-e999c86e7455?auto=format&fit=crop&w=800&q=80',
+        stages: [ { minLevel: 1, stageName: 'จิตตั้งต้น', url: POKE_URL + '151.gif', scale: 'scale-[1.2] md:scale-[1.5]' }, { minLevel: 10, stageName: 'ร่างสมบูรณ์', url: POKE_URL + '150.gif', scale: 'scale-[1.5] md:scale-[1.75]' }, { minLevel: 25, stageName: 'เกราะเหล็ก', url: POKE_URL + '150.gif', scale: 'scale-[1.75] md:scale-[2]' }, { minLevel: 40, stageName: 'ร่างสุดยอด X', url: POKE_SHINY_URL + '150.gif', scale: 'scale-[2] md:scale-[2.5]' } ]
+    },
+    'lucario': {
+        name: '🐶 นักสู้เหล็กกล้า', price: 1500, baseCP: 220, element: 'normal', bgGradient: 'from-blue-200 to-indigo-300', bgUrl: 'https://images.unsplash.com/photo-1550684376-efcbd6e3f031?auto=format&fit=crop&w=800&q=80',
+        stages: [ { minLevel: 1, stageName: 'ลูกหมาสู้ชีวิต', url: POKE_URL + '447.gif', scale: 'scale-[1.2] md:scale-[1.5]' }, { minLevel: 8, stageName: 'หมานักสู้', url: POKE_URL + '448.gif', scale: 'scale-[1.5] md:scale-[1.75]' }, { minLevel: 18, stageName: 'ร่างสุดยอด', url: POKE_URL + '448.gif', scale: 'scale-[1.75] md:scale-[2]' }, { minLevel: 30, stageName: 'นักสู้ทองคำ', url: POKE_SHINY_URL + '448.gif', scale: 'scale-[2] md:scale-[2.5]' } ]
+    },
+    'greninja': {
+        name: '🥷 นินจากบน้ำ', price: 1200, baseCP: 210, element: 'water', bgGradient: 'from-blue-400 to-cyan-300', bgUrl: 'https://images.unsplash.com/photo-1518837695005-2083093ee35b?auto=format&fit=crop&w=800&q=80',
+        stages: [ { minLevel: 1, stageName: 'กบฟองสบู่', url: POKE_URL + '656.gif', scale: 'scale-[1.2] md:scale-[1.5]' }, { minLevel: 8, stageName: 'นินจาฝึกหัด', url: POKE_URL + '657.gif', scale: 'scale-[1.5] md:scale-[1.75]' }, { minLevel: 18, stageName: 'นินจากบ', url: POKE_URL + '658.gif', scale: 'scale-[1.75] md:scale-[2]' }, { minLevel: 30, stageName: 'ร่างซาโตชิ', url: POKE_SHINY_URL + '658.gif', scale: 'scale-[2] md:scale-[2.5]' } ]
+    },
+    'blaziken': {
+        name: '🔥 ไก่นักสู้', price: 1300, baseCP: 215, element: 'fire', bgGradient: 'from-orange-200 to-red-400', bgUrl: 'https://images.unsplash.com/photo-1516253593875-bd7ba052fbc5?auto=format&fit=crop&w=800&q=80',
+        stages: [ { minLevel: 1, stageName: 'ลูกไก่ไฟ', url: POKE_URL + '255.gif', scale: 'scale-[1.2] md:scale-[1.5]' }, { minLevel: 8, stageName: 'ไก่วัยรุ่น', url: POKE_URL + '256.gif', scale: 'scale-[1.5] md:scale-[1.75]' }, { minLevel: 18, stageName: 'ไก่นักสู้', url: POKE_URL + '257.gif', scale: 'scale-[1.75] md:scale-[2]' }, { minLevel: 30, stageName: 'ร่างสุดยอด', url: POKE_SHINY_URL + '257.gif', scale: 'scale-[2] md:scale-[2.5]' } ]
+    },
+    'dragonite': {
+        name: '🐲 มังกรบิน', price: 1800, baseCP: 240, element: 'dragon', bgGradient: 'from-amber-100 to-orange-300', bgUrl: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=800&q=80',
+        stages: [ { minLevel: 1, stageName: 'งูน้อย', url: POKE_URL + '147.gif', scale: 'scale-[1.2] md:scale-[1.5]' }, { minLevel: 10, stageName: 'งูทะเล', url: POKE_URL + '148.gif', scale: 'scale-[1.5] md:scale-[1.75]' }, { minLevel: 25, stageName: 'มังกรบิน', url: POKE_URL + '149.gif', scale: 'scale-[1.75] md:scale-[2]' }, { minLevel: 40, stageName: 'มังกรบินสีเขียว', url: POKE_SHINY_URL + '149.gif', scale: 'scale-[2] md:scale-[2.5]' } ]
     }
 };
 
@@ -555,7 +653,7 @@ function calculatePetHealth(pet) {
     const now = Date.now();
     const msPassed = now - (pet.lastFedTime || now);
     
-    const decayRate = pet.isInjured ? 2160000 : 4320000;
+    const decayRate = pet.isInjured ? 12960000 : 25920000;
     const hpReduced = Math.floor(msPassed / decayRate); 
     
     let currentHealth = pet.health - hpReduced;
@@ -580,18 +678,108 @@ function renderAdoptionGrid() {
         const priceHtml = isFirstPet ? '<span class="text-emerald-500 font-bold text-xs mt-2 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 shadow-sm">✨ ฟรี! (ตัวแรก)</span>' : `<span class="text-amber-500 font-bold text-xs mt-2 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 shadow-sm">🪙 ${new Intl.NumberFormat().format(price)} BN</span>`;
         
         html += `
-            <div onclick="openNamingModal('new', '${key}')" class="w-40 sm:w-48 cursor-pointer bg-white p-5 rounded-3xl border-2 border-slate-100 hover:border-[#31c1d7] shadow-sm hover:shadow-xl transition-all group flex flex-col items-center transform hover:-translate-y-1 relative">
-                <div class="absolute top-3 left-3 text-lg" title="ธาตุ: ${el.name}">${el.icon}</div>
-                <div class="h-28 w-28 mb-3 bg-gradient-to-br ${bgGradient} border-4 border-white rounded-full relative shadow-inner flex items-center justify-center overflow-hidden">
-                    <img src="${finalStage.url}" class="w-[100%] h-[100%] object-contain transform group-hover:scale-110 transition-transform duration-300 drop-shadow-xl z-10" alt="Pet" onerror="this.src='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/1.gif'">
+            <div onclick="openPokedexCard('${key}')" class="w-40 sm:w-48 flex-shrink-0 cursor-pointer p-5 rounded-[2rem] border-2 border-white/20 hover:border-white/50 shadow-md hover:shadow-2xl transition-all group flex flex-col items-center transform hover:-translate-y-2 relative overflow-hidden bg-gradient-to-br ${bgGradient}">
+                <div class="absolute inset-0 opacity-40 bg-cover bg-center mix-blend-overlay" style="background-image: url('${def.bgUrl}')"></div>
+                
+                <div class="absolute top-3 left-3 text-lg bg-white/50 backdrop-blur-sm rounded-full w-8 h-8 flex items-center justify-center shadow-sm z-20" title="ธาตุ: ${el.name}">${el.icon}</div>
+                
+                <div class="h-32 w-full mb-2 relative flex items-center justify-center z-10">
+                    <img src="${finalStage.url}" class="w-[120%] h-[120%] object-contain transform group-hover:scale-125 transition-transform duration-500 drop-shadow-2xl" alt="Pet" onerror="this.src='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/1.gif'">
                 </div>
-                <span class="text-sm font-bold text-slate-700 group-hover:text-[#31c1d7] text-center">${def.name}</span>
-                ${priceHtml}
+                
+                <div class="bg-white/90 backdrop-blur-md w-[110%] -mx-4 -mb-5 mt-2 pt-3 pb-4 px-4 flex flex-col items-center z-20 border-t border-white/50 shadow-[0_-5px_15px_rgba(0,0,0,0.05)]">
+                    <span class="text-sm font-black text-slate-800 group-hover:text-[#31c1d7] text-center mb-1 transition-colors">${def.name}</span>
+                    ${priceHtml}
+                </div>
             </div>
         `;
     });
     gridContainer.innerHTML = html;
     isAdoptionGridRendered = true;
+}
+
+window.openPokedexCard = function(key) {
+    const def = PET_EVOLUTIONS[key];
+    const isFirstPet = myPetData.inventory.length === 0;
+    const price = isFirstPet ? 0 : def.price;
+    
+    const modal = document.getElementById('pokedex-card-modal');
+    const box = document.getElementById('pokedex-card-box');
+    
+    document.getElementById('pokedex-card-header').className = `relative h-48 sm:h-56 p-6 flex-shrink-0 transition-colors duration-500 rounded-t-[3rem] sm:rounded-t-[3rem] overflow-hidden bg-gradient-to-br ${def.bgGradient}`;
+    
+    const keys = Object.keys(PET_EVOLUTIONS);
+    const idx = keys.indexOf(key) + 1;
+    document.getElementById('pokedex-card-id').textContent = '#' + String(idx).padStart(3, '0');
+    
+    const cleanName = def.name.replace(/[^ก-๙a-zA-Z0-9\s]/g, '').trim();
+    document.getElementById('pokedex-card-name').textContent = cleanName;
+    document.getElementById('pokedex-card-element').innerHTML = `${ELEMENTS[def.element].icon} ${ELEMENTS[def.element].name}`;
+    
+    const firstStage = def.stages[0];
+    document.getElementById('pokedex-card-img').src = firstStage.url; 
+    
+    document.getElementById('pokedex-card-cp').textContent = def.baseCP;
+    document.getElementById('pokedex-card-price').textContent = isFirstPet ? 'ฟรี' : def.price;
+    
+    setTimeout(() => {
+        document.getElementById('pokedex-card-cp-bar').style.width = Math.min(100, (def.baseCP / 300) * 100) + '%';
+        document.getElementById('pokedex-card-price-bar').style.width = Math.min(100, (def.price / 3000) * 100) + '%';
+    }, 100);
+    
+    let evoHtml = '';
+    def.stages.forEach((stg, i) => {
+        evoHtml += `
+            <div class="flex flex-col items-center flex-shrink-0">
+                <div class="w-14 h-14 sm:w-16 sm:h-16 bg-white rounded-full shadow-sm border border-slate-200 flex items-center justify-center p-2 mb-2 relative">
+                    <img src="${stg.url}" class="max-w-full max-h-full object-contain">
+                </div>
+                <span class="text-[10px] font-bold text-slate-700">${stg.stageName}</span>
+                <span class="text-[9px] text-slate-400 font-bold bg-slate-100 px-1.5 rounded mt-0.5 border border-slate-200">Lv.${stg.minLevel}</span>
+            </div>
+        `;
+        if (i < def.stages.length - 1) {
+            evoHtml += `<div class="text-slate-300 font-black text-lg flex-shrink-0 mx-2">&rarr;</div>`;
+        }
+    });
+    document.getElementById('pokedex-card-evolutions').innerHTML = evoHtml;
+    
+    const buyBtn = document.getElementById('pokedex-card-buy-btn');
+    const buyPrice = document.getElementById('pokedex-card-buy-price');
+    if (isFirstPet) {
+        buyPrice.innerHTML = '✨ ฟรี!';
+        buyPrice.className = 'text-emerald-400 bg-slate-700 px-2 py-0.5 rounded-lg ml-1 shadow-inner border border-slate-600';
+    } else {
+        buyPrice.innerHTML = `🪙 ${price} BN`;
+        buyPrice.className = 'text-amber-400 bg-slate-700 px-2 py-0.5 rounded-lg ml-1 shadow-inner border border-slate-600';
+    }
+    
+    buyBtn.onclick = () => {
+        closePokedexCard();
+        setTimeout(() => openNamingModal('new', key), 300);
+    };
+    
+    modal.classList.remove('hidden');
+    void modal.offsetWidth;
+    modal.classList.remove('opacity-0');
+    box.classList.remove('translate-y-full', 'sm:scale-90');
+    box.classList.add('translate-y-0', 'sm:scale-100');
+}
+
+window.closePokedexCard = function() {
+    const modal = document.getElementById('pokedex-card-modal');
+    const box = document.getElementById('pokedex-card-box');
+    
+    modal.classList.add('opacity-0');
+    box.classList.remove('translate-y-0', 'sm:scale-100');
+    box.classList.add('translate-y-full', 'sm:scale-90');
+    
+    document.getElementById('pokedex-card-cp-bar').style.width = '0%';
+    document.getElementById('pokedex-card-price-bar').style.width = '0%';
+    
+    setTimeout(() => {
+        modal.classList.add('hidden');
+    }, 300);
 }
 
 function renderInventoryGrid() {
@@ -608,7 +796,7 @@ function renderInventoryGrid() {
         const el = ELEMENTS[def.element];
         
         html += `
-        <div class="w-40 sm:w-48 bg-white p-5 rounded-3xl border-2 ${isActive ? 'border-[#31c1d7] ring-4 ring-[#31c1d7]/20 shadow-md' : 'border-slate-100 hover:border-[#31c1d7]/50 shadow-sm'} transition-all group flex flex-col items-center relative ${pet.isInjured ? 'bg-rose-50 border-rose-100' : ''}">
+        <div class="w-40 sm:w-48 flex-shrink-0 bg-white p-5 rounded-3xl border-2 ${isActive ? 'border-[#31c1d7] ring-4 ring-[#31c1d7]/20 shadow-md' : 'border-slate-100 hover:border-[#31c1d7]/50 shadow-sm'} transition-all group flex flex-col items-center relative ${pet.isInjured ? 'bg-rose-50 border-rose-100' : ''}">
             ${isActive ? '<span class="absolute -top-3 bg-[#31c1d7] text-white text-[10px] font-black px-3 py-1 rounded-full shadow-sm z-20">⭐ ใช้งานอยู่</span>' : ''}
             
             <div class="absolute top-2 left-2 text-base" title="ธาตุ: ${el.name}">${el.icon}</div>
@@ -850,7 +1038,7 @@ window.renderPetUI = function() {
             if (activePet.isInjured) statusHtml += '<span class="bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-sm border border-rose-600 animate-pulse">🤕 บาดเจ็บ (พลังชีวิตลดลงง่าย)</span>';
             if (activePet.stunUntil && activePet.stunUntil > Date.now()) statusHtml += '<span class="bg-yellow-400 text-yellow-900 text-[10px] font-bold px-2 py-0.5 rounded shadow-sm">😵 มึนงง</span>';
             if (activePet.trap === 'shield') statusHtml += '<span class="bg-blue-500 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-sm border border-blue-600">🛡️ กางโล่บาเรียแล้ว</span>';
-            if (activePet.trap === 'reflect') statusHtml += '<span class="bg-fuchsia-500 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-sm border border-fuchsia-600">🪞 ติดตั้งกระจกสะท้อน</span>';
+            if (activePet.trap === 'reflect') statusHtml += '<span class="bg-fuchsia-500 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-sm border border-fuchsia-600">🪞 ติดตั้งกระจสะท้อน</span>';
             if (activePet.trap === 'banana') statusHtml += '<span class="bg-yellow-500 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-sm border border-yellow-600">🍌 วางกับดักกล้วยแล้ว</span>';
             trapStatus.innerHTML = statusHtml;
         }
@@ -1272,7 +1460,7 @@ function renderOpponentCards(keyword) {
         }
 
         html += `
-        <div class="bg-white rounded-[1.5rem] shadow-sm hover:shadow-xl border border-slate-100 overflow-hidden transition-all duration-300 flex flex-col relative group transform hover:-translate-y-1">
+        <div class="bg-white rounded-[1.5rem] shadow-sm hover:shadow-xl border border-slate-100 overflow-hidden transition-all duration-300 flex flex-col relative group transform hover:-translate-y-1 w-full min-w-[140px]">
             <div class="h-24 bg-gradient-to-br ${pDef.bgGradient} relative overflow-hidden">
                 <div class="absolute inset-0 opacity-50 bg-cover bg-center mix-blend-overlay" style="background-image: url('${pDef.bgUrl}')"></div>
                 
@@ -1290,7 +1478,7 @@ function renderOpponentCards(keyword) {
                 <div class="w-20 h-20 -mt-10 bg-white/50 backdrop-blur-md rounded-full shadow-lg border-4 border-white flex items-center justify-center relative z-10 ${isInjured ? 'grayscale-[0.6] opacity-80' : ''}">
                     <img src="${currentStage.url}" class="w-[140%] h-[140%] object-contain drop-shadow-xl" onerror="this.src='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/1.gif'">
                 </div>
-                <h4 class="font-black text-slate-800 text-[15px] mt-2 truncate w-full text-center">${escapeHtmlLocal(pData.petName || pDef.name)}</h4>
+                <h4 class="font-black text-slate-800 text-[15px] mt-2 w-full text-center truncate">${escapeHtmlLocal(pData.petName || pDef.name)}</h4>
                 <p class="text-[10px] font-black text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-lg mt-1 border border-slate-200">Lv. ${pData.level}</p>
                 
                 <div class="mt-auto w-full pt-2">
@@ -1374,6 +1562,39 @@ window.startPetBattle = function(targetEmail, targetName, targetPetData) {
         document.getElementById('battle-me-wrapper').classList.add('anim-shake');
         document.getElementById('battle-enemy-wrapper').classList.add('anim-shake');
         
+        processBattleResult(myPet, myCP, targetPetData, baseTargetCP, targetEmail);
+    }, 1500);
+};
+
+function processBattleResult(myPet, myCP, targetPetData, targetCP, targetEmail) {
+    const statusText = document.getElementById('battle-status-text');
+    const resultArea = document.getElementById('battle-result-area');
+    const resultTitle = document.getElementById('battle-result-title');
+    const resultDesc = document.getElementById('battle-result-desc');
+    const resultBox = document.getElementById('battle-result-box');
+    
+    const myEl = PET_EVOLUTIONS[myPet.petType].element;
+    const targetEl = PET_EVOLUTIONS[targetPetData.petType].element;
+    
+    let myFinalCP = myCP;
+    let targetFinalCP = targetCP;
+    
+    if (ELEMENTS[myEl].beats.includes(targetEl)) {
+        myFinalCP = Math.floor(myFinalCP * 1.2);
+        statusText.innerHTML = `<span class="text-emerald-400 font-black text-lg">ได้เปรียบธาตุ! ${ELEMENTS[myEl].icon} ชนะ ${ELEMENTS[targetEl].icon} (CP +20%)</span>`;
+    } else if (ELEMENTS[targetEl].beats.includes(myEl)) {
+        targetFinalCP = Math.floor(targetFinalCP * 1.2);
+        statusText.innerHTML = `<span class="text-rose-400 font-black text-lg">เสียเปรียบธาตุ! ${ELEMENTS[myEl].icon} แพ้ทาง ${ELEMENTS[targetEl].icon} (เป้าหมาย CP +20%)</span>`;
+    } else {
+        statusText.innerHTML = `<span class="text-white font-bold text-lg">ประจัญบาน! ⚔️</span>`;
+    }
+
+    document.getElementById('battle-enemy-cp').textContent = 'CP: ' + new Intl.NumberFormat().format(targetFinalCP);
+
+    let myRoll = myFinalCP * (0.9 + (Math.random() * 0.2));
+    let targetRoll = targetFinalCP * (0.9 + (Math.random() * 0.2));
+
+    setTimeout(() => {
         if (typeof google !== 'undefined' && google.script) {
             google.script.run.withSuccessHandler(function(targetFullData) {
                 if (!targetFullData || targetFullData.error || !targetFullData.inventory) {
@@ -1384,34 +1605,13 @@ window.startPetBattle = function(targetEmail, targetName, targetPetData) {
 
                 if (!targetFullData.battleLogs) targetFullData.battleLogs = [];
                 let tPet = targetFullData.inventory[targetFullData.activePetIndex];
-                
                 let tCurrentHP = calculatePetHealth(tPet);
                 let myCurrentHP = calculatePetHealth(myPet);
-                
-                const myEl = PET_EVOLUTIONS[myPet.petType].element;
-                const targetEl = PET_EVOLUTIONS[tPet.petType].element;
-                
-                let myFinalCP = myCP;
-                let targetFinalCP = baseTargetCP;
-                
-                if (ELEMENTS[myEl].beats.includes(targetEl)) {
-                    myFinalCP = Math.floor(myFinalCP * 1.2);
-                    statusText.innerHTML = `<span class="text-emerald-400 font-black text-lg">ได้เปรียบธาตุ! ${ELEMENTS[myEl].icon} ชนะ ${ELEMENTS[targetEl].icon} (CP +20%)</span>`;
-                } else if (ELEMENTS[targetEl].beats.includes(myEl)) {
-                    targetFinalCP = Math.floor(targetFinalCP * 1.2);
-                    statusText.innerHTML = `<span class="text-rose-400 font-black text-lg">เสียเปรียบธาตุ! ${ELEMENTS[myEl].icon} แพ้ทาง ${ELEMENTS[targetEl].icon} (เป้าหมาย CP +20%)</span>`;
-                } else {
-                    statusText.innerHTML = `<span class="text-white font-bold text-lg">ประจัญบาน! ⚔️</span>`;
-                }
-
-                document.getElementById('battle-enemy-cp').textContent = 'CP: ' + new Intl.NumberFormat().format(targetFinalCP);
-
-                let myRoll = myFinalCP * (0.9 + (Math.random() * 0.2));
-                let targetRoll = targetFinalCP * (0.9 + (Math.random() * 0.2));
 
                 let trapMsg = '';
                 let isWin = false;
                 let forcedLoss = false;
+                let expGained = 0;
 
                 let defenderLogMsg = '';
                 let attackerLogMsg = '';
@@ -1421,57 +1621,73 @@ window.startPetBattle = function(targetEmail, targetName, targetPetData) {
                 if (tPet.trap === 'shield') {
                     trapMsg = 'เป้าหมายกาง 🛡️ โล่บาเรีย ป้องกันการโจมตีทั้งหมด!';
                     forcedLoss = true;
+                    expGained = 10;
                     myPet.health = Math.max(0, myCurrentHP - 40);
                     myPet.lastFedTime = Date.now();
                     myPet.isInjured = true;
                     tPet.trap = null;
                     
-                    attackerLogMsg = `เป้าหมายกางโล่บาเรียป้องกันการโจมตี! (คู่หูคุณเลือดลด -40)`;
+                    attackerLogMsg = `เป้าหมายกางโล่บาเรียป้องกันการโจมตี! คู่หูบาดเจ็บ (-40 เลือด) ได้ +${expGained} EXP`;
                     attackerLogType = 'lose';
                     defenderLogMsg = `โล่บาเรียทำงาน! ป้องกันการโจมตีจากศัตรูสำเร็จ`;
                     defenderLogType = 'defense';
                 } else if (tPet.trap === 'banana') {
                     trapMsg = 'อ๊ะ! คู่หูของคุณเหยียบ 🍌 เปลือกกล้วย ติดมึนงง!';
                     forcedLoss = true;
+                    expGained = 10;
                     myPet.stunUntil = Date.now() + (2 * 60 * 60 * 1000);
                     tPet.trap = null;
                     
-                    attackerLogMsg = `เหยียบเปลือกกล้วยของเป้าหมายจนลื่นล้ม (ติดมึนงง 2 ชม.)`;
+                    attackerLogMsg = `เหยียบเปลือกกล้วยลื่นล้ม ติดมึนงง 2 ชม. ได้ +${expGained} EXP`;
                     attackerLogType = 'lose';
                     defenderLogMsg = `กับดักกล้วยทำงาน! ศัตรูลื่นล้มมึนงงไปเลย`;
                     defenderLogType = 'defense';
                 } else if (tPet.trap === 'reflect') {
                     trapMsg = 'เป้าหมายใช้ 🪞 กระจกสะท้อน พลังโจมตีย้อนกลับมาโดนเราเอง!';
                     forcedLoss = true;
+                    expGained = 10;
                     myPet.health = Math.max(0, myCurrentHP - 40);
                     myPet.lastFedTime = Date.now();
                     myPet.isInjured = true;
                     tPet.trap = null;
                     
-                    attackerLogMsg = `โดนกระจกสะท้อนดาเมจกลับมา! (คู่หูคุณเลือดลด -40)`;
+                    attackerLogMsg = `โดนกระจกสะท้อนดาเมจกลับมา! คู่หูบาดเจ็บ (-40 เลือด) ได้ +${expGained} EXP`;
                     attackerLogType = 'lose';
                     defenderLogMsg = `กระจกสะท้อนดาเมจ 40 หน่วยกลับไปหาผู้บุกรุกสำเร็จ!`;
                     defenderLogType = 'defense';
                 } else {
                     isWin = myRoll >= targetRoll;
                     if (!isWin) {
+                        expGained = 10;
                         myPet.health = Math.max(0, myCurrentHP - 40);
                         myPet.lastFedTime = Date.now();
                         myPet.isInjured = true;
-                        attackerLogMsg = `พ่ายแพ้ในการประลอง! (คู่หูคุณเลือดลด -40)`;
+                        attackerLogMsg = `พ่ายแพ้ในการประลอง! คู่หูบาดเจ็บ (-40 เลือด) ได้ +${expGained} EXP`;
                         attackerLogType = 'lose';
                         defenderLogMsg = `ป้องกันการบุกรุกจากศัตรูสำเร็จ!`;
                         defenderLogType = 'win';
                     } else {
-                        tPet.health = Math.max(0, tCurrentHP - 40);
+                        expGained = 20; 
+                        tPet.health = Math.max(0, tCurrentHP - 40); 
                         tPet.lastFedTime = Date.now();
                         tPet.isInjured = true;
-                        attackerLogMsg = `ชัยชนะ! โค่นเป้าหมายสำเร็จ`;
+                        attackerLogMsg = `ชัยชนะ! โค่นเป้าหมายสำเร็จ ได้ +${expGained} EXP`;
                         attackerLogType = 'win';
-                        defenderLogMsg = `พ่ายแพ้ต่อผู้บุกรุก! (คู่หูคุณเลือดลด -40)`;
+                        defenderLogMsg = `พ่ายแพ้ต่อผู้บุกรุก! ได้รับบาดเจ็บ (เลือด -40)`;
                         defenderLogType = 'lose';
                     }
                 }
+
+                myPet.exp += expGained;
+                let reqExp = getExpForNextLevel(myPet.level);
+                let leveledUp = false;
+                while (myPet.exp >= reqExp) {
+                    myPet.exp -= reqExp;
+                    myPet.level += 1;
+                    leveledUp = true;
+                    reqExp = getExpForNextLevel(myPet.level);
+                }
+                if(leveledUp) attackerLogMsg += ` 🎉 เลเวลอัป!`;
 
                 const myName = (typeof userInfo !== 'undefined' && userInfo.profile && userInfo.profile.FullName) ? userInfo.profile.FullName : getActiveUserEmail().split('@')[0];
                 targetFullData.battleLogs.unshift({
@@ -1496,20 +1712,14 @@ window.startPetBattle = function(targetEmail, targetName, targetPetData) {
                 savePetDataBackend();
                 renderPetUI();
 
-                const resultArea = document.getElementById('battle-result-area');
-                const resultTitle = document.getElementById('battle-result-title');
-                const resultDesc = document.getElementById('battle-result-desc');
-                const resultBox = document.getElementById('battle-result-box');
-
                 if (forcedLoss) {
                     statusText.innerHTML = `<span class="text-amber-400 font-black text-sm">${trapMsg}</span>`;
                 }
-
                 resultArea.classList.remove('opacity-0');
                 if (isWin) {
                     resultBox.className = "p-6 rounded-2xl border-4 shadow-2xl inline-block min-w-[250px] bg-emerald-50 border-emerald-400 text-emerald-700 transform scale-110 transition-transform duration-500";
                     resultTitle.textContent = "🏆 ชัยชนะ!";
-                    resultDesc.textContent = "คู่หูของคุณเอาชนะได้อย่างสมเกียรติ! (เป้าหมายพละกำลังลดลง 40 หน่วย)";
+                    resultDesc.textContent = `ทำได้ดีมาก! ได้รับ +${expGained} EXP (เป้าหมายเสียเลือด 40 HP)`;
                 } else {
                     resultBox.className = "p-6 rounded-2xl border-4 shadow-2xl inline-block min-w-[250px] bg-rose-50 border-rose-400 text-rose-700 transform scale-90 transition-transform duration-500";
                     resultTitle.textContent = "💔 พ่ายแพ้...";
@@ -1517,14 +1727,10 @@ window.startPetBattle = function(targetEmail, targetName, targetPetData) {
                 }
 
             }).getPetData(targetEmail);
-        } else {
-            statusText.innerHTML = `<span class="text-red-400 font-black text-sm">ระบบขัดข้อง</span>`;
         }
     }, 1500);
 }
-/* ==========================================
-   JAVIS ADDED: ระบบส่องสัตว์เลี้ยงของเพื่อน (Pet Inspector) และดูแลเพื่อน
-========================================== */
+
 window.inspectStudentPet = function(email) {
     if (!cachedLeaderboardData || !cachedLeaderboardData[currentLeaderboardPeriod]) return;
     const targetUser = cachedLeaderboardData[currentLeaderboardPeriod].find(function(u) { return u.email === email; });
@@ -1545,7 +1751,6 @@ window.inspectStudentPet = function(email) {
     const content = document.getElementById('pet-inspector-content');
     const isMe = targetUser.email === userInfo.email.toLowerCase();
 
-    // กรณีเพื่อนคนนี้ยังไม่มีสัตว์เลี้ยง (ไม่เคยรับเลี้ยง)
     if (!targetUser.activePet || typeof PET_EVOLUTIONS === 'undefined' || !PET_EVOLUTIONS[targetUser.activePet.petType]) {
         content.innerHTML = '<div class="p-8 text-center bg-slate-50">' +
             '<img src="' + escapeHtml(targetUser.img) + '" class="w-20 h-20 rounded-full mx-auto mb-4 border-4 border-white shadow-md object-cover">' +
@@ -1558,7 +1763,6 @@ window.inspectStudentPet = function(email) {
             '<button onclick="closePetInspector()" class="mt-6 w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl transition-colors shadow-sm">ปิดหน้าต่าง</button>' +
         '</div>';
     } 
-    // กรณีมีสัตว์เลี้ยง ให้โชว์การ์ดแบบอลังการ
     else {
         const pData = targetUser.activePet;
         const pDef = PET_EVOLUTIONS[pData.petType];
@@ -1572,14 +1776,12 @@ window.inspectStudentPet = function(email) {
         
         let targetHP = calculatePetHealth(pData);
 
-        // JAVIS ADDED: สร้างปุ่มสำหรับท้าประลอง และ ปุ่มรักษาสัตว์เลี้ยง
         let battleBtnHtml = '';
         let healBtnHtml = '';
         
         if (!isMe) {
             battleBtnHtml = '<button onclick="triggerPetBattle(\'' + escapeJsString(targetUser.email) + '\', event); closePetInspector();" class="w-full mt-4 py-3 bg-gradient-to-r from-rose-500 to-red-600 hover:from-red-600 hover:to-rose-700 text-white font-black rounded-xl transition-all shadow-lg shadow-rose-500/30 flex items-center justify-center gap-2 text-base transform hover:-translate-y-0.5"><span class="text-xl drop-shadow-sm">⚔️</span> ท้าประลองเลย!</button>';
             
-            // JAVIS FIX: โหมดดูแลสัตว์เลี้ยงเพื่อน ได้ EXP +10
             if (pData.isInjured || targetHP < 100 || pData.stunUntil > Date.now()) {
                 healBtnHtml = '<button onclick="healFriendPet(\'' + escapeJsString(targetUser.email) + '\', \'' + escapeJsString(targetUser.name) + '\'); closePetInspector();" class="w-full mt-3 py-3 bg-gradient-to-r from-emerald-400 to-emerald-500 hover:from-emerald-500 hover:to-emerald-600 text-white font-black rounded-xl transition-all shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2 text-base transform hover:-translate-y-0.5"><span class="text-xl drop-shadow-sm">💊</span> ช่วยรักษาเพื่อน (ใช้ 30 BN / ได้ +10 EXP)</button>';
             } else {
@@ -1646,7 +1848,6 @@ window.closePetInspector = function() {
     }
 };
 
-// JAVIS ADDED: ฟังก์ชันรักษาสัตว์เลี้ยงของเพื่อนเพื่อรับ EXP
 window.healFriendPet = function(targetEmail, targetName) {
     if (myPetData.inventory.length === 0 || myPetData.activePetIndex < 0) {
         if(typeof showToast !== 'undefined') showToast('คุณต้องมีคู่หูก่อนถึงจะไปดูแลสัตว์เลี้ยงคนอื่นได้!', 'warning');
@@ -1663,7 +1864,6 @@ window.healFriendPet = function(targetEmail, targetName) {
 
     if(typeof showToast !== 'undefined') showToast('กำลังเดินทางไปบ้านเพื่อน...', 'info');
 
-    // ดึงข้อมูลเป้าหมายมารักษา
     google.script.run.withSuccessHandler(function(targetFullData) {
         if (!targetFullData || targetFullData.error || !targetFullData.inventory) {
             if(typeof showToast !== 'undefined') showToast('ไม่พบข้อมูลสัตว์เลี้ยงของเป้าหมาย', 'error');
@@ -1678,7 +1878,6 @@ window.healFriendPet = function(targetEmail, targetName) {
             return;
         }
 
-        // ฟื้นฟูเป้าหมาย
         tPet.health = Math.min(100, currentHP + 30);
         tPet.isInjured = false;
         tPet.stunUntil = 0;
@@ -1697,7 +1896,6 @@ window.healFriendPet = function(targetEmail, targetName) {
 
         google.script.run.savePetData(targetEmail, targetFullData);
 
-        // มอบรางวัลให้ตัวเราเอง
         myPetData.globalSpentBN += 30;
         let myPet = myPetData.inventory[myPetData.activePetIndex];
         myPet.exp += 10;
@@ -1738,252 +1936,4 @@ window.triggerPetBattle = function(email, event) {
         }
     }
 };
-
-window.startPetBattleFromSearch = function(targetEmail, targetName) {
-    closeOpponentSearch(); 
-    
-    let targetUser = null;
-    if (typeof cachedLeaderboardData !== 'undefined' && cachedLeaderboardData['all']) {
-        targetUser = cachedLeaderboardData['all'].find(u => u.email === targetEmail);
-    }
-    
-    if (targetUser && targetUser.activePet) {
-        setTimeout(() => {
-            startPetBattle(targetEmail, targetName, targetUser.activePet);
-        }, 400); 
-    } else {
-        if(typeof showToast !== 'undefined') showToast('ไม่พบข้อมูลคู่ต่อสู้ หรือเป้าหมายเปลี่ยนสัตว์เลี้ยงไปแล้ว', 'error');
-    }
-};
-
-window.closeBattleScreen = function() {
-    document.getElementById('pet-battle-overlay').classList.add('hidden');
-    document.getElementById('battle-result-area').classList.add('opacity-0');
-};
-
-window.startPetBattle = function(targetEmail, targetName, targetPetData) {
-    if (myPetData.inventory.length === 0 || myPetData.activePetIndex < 0) {
-        if(typeof showToast !== 'undefined') showToast('คุณต้องมีสัตว์เลี้ยงก่อนถึงจะประลองได้!', 'warning');
-        return;
-    }
-    
-    const myPet = myPetData.inventory[myPetData.activePetIndex];
-    if (myPet.isInjured) {
-        if(typeof showToast !== 'undefined') showToast('คู่หูของคุณบาดเจ็บอยู่! กรุณารักษาก่อน (ใช้ยาฟื้นกำลัง)', 'error');
-        return;
-    }
-    if (myPet.stunUntil && myPet.stunUntil > Date.now()) {
-        if(typeof showToast !== 'undefined') showToast('คู่หูของคุณมึนงงจากเปลือกกล้วย! ไปสู้ไม่ได้!', 'error');
-        return;
-    }
-
-    if (!targetPetData || targetPetData.isInjured) {
-        if(typeof showToast !== 'undefined') showToast('เป้าหมายบาดเจ็บอยู่ ไม่สามารถรังแกซ้ำได้!', 'info');
-        return;
-    }
-
-    openPetModal();
-    const overlay = document.getElementById('pet-battle-overlay');
-    overlay.classList.remove('hidden');
-    overlay.classList.add('flex');
-    
-    const myDef = PET_EVOLUTIONS[myPet.petType];
-    const myStage = getCurrentStage(myPet.petType, myPet.level);
-    const myCP = calculateCP(myPet);
-    
-    document.getElementById('battle-me-img').src = myStage.url;
-    document.getElementById('battle-me-name').textContent = myPet.petName || myDef.name;
-    document.getElementById('battle-me-cp').textContent = 'CP: ' + new Intl.NumberFormat().format(myCP);
-
-    const targetDef = PET_EVOLUTIONS[targetPetData.petType];
-    const targetStage = getCurrentStage(targetPetData.petType, targetPetData.level);
-    let baseTargetCP = Math.floor((targetDef.baseCP * targetPetData.level) + (targetPetData.exp * 0.5));
-    
-    document.getElementById('battle-enemy-img').src = targetStage.url;
-    document.getElementById('battle-enemy-name').textContent = targetPetData.petName || targetDef.name;
-    document.getElementById('battle-enemy-cp').textContent = 'CP: ???'; 
-
-    const statusText = document.getElementById('battle-status-text');
-    statusText.innerHTML = '<span class="animate-pulse text-amber-400">กำลังส่งคู่หูเข้าปะทะ...</span>';
-
-    setTimeout(() => {
-        document.getElementById('battle-me-wrapper').classList.add('anim-shake');
-        document.getElementById('battle-enemy-wrapper').classList.add('anim-shake');
-        
-        processBattleResult(myPet, myCP, targetPetData, baseTargetCP, targetEmail);
-    }, 1500);
-};
-
-// JAVIS REFACTORED: คำนวณ HP เป้าหมายและ EXP โดยตรง
-function processBattleResult(myPet, myCP, targetPetData, targetCP, targetEmail) {
-    const statusText = document.getElementById('battle-status-text');
-    const resultArea = document.getElementById('battle-result-area');
-    const resultTitle = document.getElementById('battle-result-title');
-    const resultDesc = document.getElementById('battle-result-desc');
-    const resultBox = document.getElementById('battle-result-box');
-    
-    const myEl = PET_EVOLUTIONS[myPet.petType].element;
-    const targetEl = PET_EVOLUTIONS[targetPetData.petType].element;
-    
-    let myFinalCP = myCP;
-    let targetFinalCP = targetCP;
-    
-    if (ELEMENTS[myEl].beats.includes(targetEl)) {
-        myFinalCP = Math.floor(myFinalCP * 1.2);
-        statusText.innerHTML = `<span class="text-emerald-400 font-black text-lg">ได้เปรียบธาตุ! ${ELEMENTS[myEl].icon} ชนะ ${ELEMENTS[targetEl].icon} (CP +20%)</span>`;
-    } else if (ELEMENTS[targetEl].beats.includes(myEl)) {
-        targetFinalCP = Math.floor(targetFinalCP * 1.2);
-        statusText.innerHTML = `<span class="text-rose-400 font-black text-lg">เสียเปรียบธาตุ! ${ELEMENTS[myEl].icon} แพ้ทาง ${ELEMENTS[targetEl].icon} (เป้าหมาย CP +20%)</span>`;
-    } else {
-        statusText.innerHTML = `<span class="text-white font-bold text-lg">ประจัญบาน! ⚔️</span>`;
-    }
-
-    document.getElementById('battle-enemy-cp').textContent = 'CP: ' + new Intl.NumberFormat().format(targetFinalCP);
-
-    let myRoll = myFinalCP * (0.9 + (Math.random() * 0.2));
-    let targetRoll = targetFinalCP * (0.9 + (Math.random() * 0.2));
-
-    setTimeout(() => {
-        // ประมวลผลลัพธ์ผ่าน Frontend และเซฟเข้าฐานข้อมูลเป้าหมายตรงๆ เพื่อให้เลือดลดจริง 100%
-        if (typeof google !== 'undefined' && google.script) {
-            google.script.run.withSuccessHandler(function(targetFullData) {
-                if (!targetFullData || targetFullData.error || !targetFullData.inventory) {
-                    if(typeof showToast !== 'undefined') showToast('เกิดข้อผิดพลาด ไม่พบข้อมูลเป้าหมาย', 'error');
-                    closeBattleScreen();
-                    return;
-                }
-
-                if (!targetFullData.battleLogs) targetFullData.battleLogs = [];
-                let tPet = targetFullData.inventory[targetFullData.activePetIndex];
-                let tCurrentHP = calculatePetHealth(tPet);
-                let myCurrentHP = calculatePetHealth(myPet);
-
-                let trapMsg = '';
-                let isWin = false;
-                let forcedLoss = false;
-                let expGained = 0;
-
-                let defenderLogMsg = '';
-                let attackerLogMsg = '';
-                let defenderLogType = '';
-                let attackerLogType = '';
-
-                // Check Traps
-                if (tPet.trap === 'shield') {
-                    trapMsg = 'เป้าหมายกาง 🛡️ โล่บาเรีย ป้องกันการโจมตีทั้งหมด!';
-                    forcedLoss = true;
-                    expGained = 10;
-                    myPet.health = Math.max(0, myCurrentHP - 40);
-                    myPet.lastFedTime = Date.now();
-                    myPet.isInjured = true;
-                    tPet.trap = null;
-                    
-                    attackerLogMsg = `เป้าหมายกางโล่บาเรียป้องกันการโจมตี! คู่หูบาดเจ็บ (-40 เลือด) ได้ +${expGained} EXP`;
-                    attackerLogType = 'lose';
-                    defenderLogMsg = `โล่บาเรียทำงาน! ป้องกันการโจมตีจากศัตรูสำเร็จ`;
-                    defenderLogType = 'defense';
-                } else if (tPet.trap === 'banana') {
-                    trapMsg = 'อ๊ะ! คู่หูของคุณเหยียบ 🍌 เปลือกกล้วย ติดมึนงง!';
-                    forcedLoss = true;
-                    expGained = 10;
-                    myPet.stunUntil = Date.now() + (2 * 60 * 60 * 1000);
-                    tPet.trap = null;
-                    
-                    attackerLogMsg = `เหยียบเปลือกกล้วยลื่นล้ม ติดมึนงง 2 ชม. ได้ +${expGained} EXP`;
-                    attackerLogType = 'lose';
-                    defenderLogMsg = `กับดักกล้วยทำงาน! ศัตรูลื่นล้มมึนงงไปเลย`;
-                    defenderLogType = 'defense';
-                } else if (tPet.trap === 'reflect') {
-                    trapMsg = 'เป้าหมายใช้ 🪞 กระจกสะท้อน พลังโจมตีย้อนกลับมาโดนเราเอง!';
-                    forcedLoss = true;
-                    expGained = 10;
-                    myPet.health = Math.max(0, myCurrentHP - 40);
-                    myPet.lastFedTime = Date.now();
-                    myPet.isInjured = true;
-                    tPet.trap = null;
-                    
-                    attackerLogMsg = `โดนกระจกสะท้อนดาเมจกลับมา! คู่หูบาดเจ็บ (-40 เลือด) ได้ +${expGained} EXP`;
-                    attackerLogType = 'lose';
-                    defenderLogMsg = `กระจกสะท้อนดาเมจ 40 หน่วยกลับไปหาผู้บุกรุกสำเร็จ!`;
-                    defenderLogType = 'defense';
-                } else {
-                    isWin = myRoll >= targetRoll;
-                    if (!isWin) {
-                        expGained = 10;
-                        myPet.health = Math.max(0, myCurrentHP - 40);
-                        myPet.lastFedTime = Date.now();
-                        myPet.isInjured = true;
-                        attackerLogMsg = `พ่ายแพ้ในการประลอง! คู่หูบาดเจ็บ (-40 เลือด) ได้ +${expGained} EXP`;
-                        attackerLogType = 'lose';
-                        defenderLogMsg = `ป้องกันการบุกรุกจากศัตรูสำเร็จ!`;
-                        defenderLogType = 'win';
-                    } else {
-                        // JAVIS FIX: ชนะได้ 20 EXP และลดเลือดเป้าหมาย (-40) ทันที
-                        expGained = 20; 
-                        tPet.health = Math.max(0, tCurrentHP - 40); 
-                        tPet.lastFedTime = Date.now();
-                        tPet.isInjured = true;
-                        attackerLogMsg = `ชัยชนะ! โค่นเป้าหมายสำเร็จ ได้ +${expGained} EXP`;
-                        attackerLogType = 'win';
-                        defenderLogMsg = `พ่ายแพ้ต่อผู้บุกรุก! ได้รับบาดเจ็บ (เลือด -40)`;
-                        defenderLogType = 'lose';
-                    }
-                }
-
-                // ให้ EXP สัตว์เลี้ยงเรา
-                myPet.exp += expGained;
-                let reqExp = getExpForNextLevel(myPet.level);
-                let leveledUp = false;
-                while (myPet.exp >= reqExp) {
-                    myPet.exp -= reqExp;
-                    myPet.level += 1;
-                    leveledUp = true;
-                    reqExp = getExpForNextLevel(myPet.level);
-                }
-                if(leveledUp) attackerLogMsg += ` 🎉 เลเวลอัป!`;
-
-                // เซฟประวัติให้เป้าหมาย
-                const myName = (typeof userInfo !== 'undefined' && userInfo.profile && userInfo.profile.FullName) ? userInfo.profile.FullName : getActiveUserEmail().split('@')[0];
-                targetFullData.battleLogs.unshift({
-                    timestamp: new Date().toISOString(),
-                    attacker: myName,
-                    message: defenderLogMsg,
-                    type: defenderLogType
-                });
-                if (targetFullData.battleLogs.length > 20) targetFullData.battleLogs.length = 20;
-
-                google.script.run.savePetData(targetEmail, targetFullData);
-
-                // เซฟประวัติและข้อมูลให้เรา
-                if (!myPetData.battleLogs) myPetData.battleLogs = [];
-                myPetData.battleLogs.unshift({
-                    timestamp: new Date().toISOString(),
-                    attacker: 'เป้าหมาย: ' + targetEmail.split('@')[0],
-                    message: attackerLogMsg,
-                    type: attackerLogType
-                });
-                if (myPetData.battleLogs.length > 20) myPetData.battleLogs.length = 20;
-
-                savePetDataBackend();
-                renderPetUI();
-
-                // แสดงผลหน้าจอ UI
-                if (forcedLoss) {
-                    statusText.innerHTML = `<span class="text-amber-400 font-black text-sm">${trapMsg}</span>`;
-                }
-                resultArea.classList.remove('opacity-0');
-                if (isWin) {
-                    resultBox.className = "p-6 rounded-2xl border-4 shadow-2xl inline-block min-w-[250px] bg-emerald-50 border-emerald-400 text-emerald-700 transform scale-110 transition-transform duration-500";
-                    resultTitle.textContent = "🏆 ชัยชนะ!";
-                    resultDesc.textContent = `ทำได้ดีมาก! ได้รับ +${expGained} EXP (เป้าหมายเสียเลือด 40 HP)`;
-                } else {
-                    resultBox.className = "p-6 rounded-2xl border-4 shadow-2xl inline-block min-w-[250px] bg-rose-50 border-rose-400 text-rose-700 transform scale-90 transition-transform duration-500";
-                    resultTitle.textContent = "💔 พ่ายแพ้...";
-                    resultDesc.textContent = attackerLogMsg;
-                }
-
-            }).getPetData(targetEmail);
-        }
-    }, 1500);
-}
 </script>
