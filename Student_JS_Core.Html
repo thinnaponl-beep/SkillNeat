@@ -119,7 +119,8 @@ function getLessonProgressStats(lesson) {
         const isVideoWatched = userInfo.progress.some(function(id) { return String(id).trim() === secId; });
         let isQuizPassed = true; 
         if (s.hasQuiz) {
-            isQuizPassed = s.quizScore && s.quizScore.TotalQuestions > 0 ? (s.quizScore.Score / s.quizScore.TotalQuestions) >= 0.5 : false; 
+            // JAVIS FIX: ปรับเกณฑ์ผ่านในแถบแสดงผลให้เป็น 80% (0.8)
+            isQuizPassed = s.quizScore && s.quizScore.TotalQuestions > 0 ? (s.quizScore.Score / s.quizScore.TotalQuestions) >= 0.8 : false; 
         }
         return isVideoWatched && isQuizPassed;
     }).length;
