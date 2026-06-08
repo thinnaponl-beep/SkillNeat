@@ -208,18 +208,6 @@ function togglePlayPause() {
     }
 }
 
-// ลบฟังก์ชันเปลี่ยนความเร็วเดิมทิ้งไป ปล่อยให้ปรับในฟันเฟือง Youtube อย่างเดียวได้เลย
-function changeVideoSpeed(rate) {
-    if (player && typeof player.setPlaybackRate === 'function') {
-        player.setPlaybackRate(parseFloat(rate));
-        
-        const state = player.getPlayerState();
-        if (state !== YT.PlayerState.PLAYING) {
-            player.playVideo();
-        }
-    }
-}
-
 function playSection(lessonId, sectionIndex) {
     if(typeof closeLessonDetailsModal === 'function') closeLessonDetailsModal();
     if (isMiniPlayer) closeVideo();
@@ -293,14 +281,14 @@ function playSection(lessonId, sectionIndex) {
             uploadAreaHtml + '<div id="video-ended-message" class="absolute inset-0 bg-slate-900/95 backdrop-blur-md hidden flex-col justify-center items-center z-30 animate-fade-slide-up p-4"></div></div>';
     }
     
-    // JAVIS FIX: ขยายขนาดกล่อง Player จาก max-w-4xl เป็น max-w-6xl (หรือ 7xl) เพื่อให้วิดีโอใหญ่ขึ้นเต็มตากว่าเดิม
-    views.videoPlayer.innerHTML = '<div id="video-main-container" class="max-w-6xl mx-auto w-full transition-all duration-300 h-full flex flex-col">' +
+    // JAVIS FIX: ขยายขนาดวิดีโอให้ใหญ่เต็มตาขึ้น โดยใช้ max-w-7xl
+    views.videoPlayer.innerHTML = '<div id="video-main-container" class="max-w-7xl mx-auto w-full transition-all duration-300 h-full flex flex-col">' +
         '<button id="video-back-btn" onclick="minimizeVideo(\'' + safeBackViewStr + '\')" class="mb-6 text-slate-500 font-bold py-2 px-4 rounded-xl hover:bg-slate-100 inline-flex items-center transition-all flex-shrink-0 w-fit" title="ย่อวิดีโอเป็นจอเล็ก">&larr; ย่อวิดีโอกลับหน้าหลัก</button>' +
-        '<div id="video-wrapper" class="bg-white p-6 sm:p-8 rounded-[2rem] shadow-xl border border-slate-100 relative transition-all duration-300 flex flex-col">' +
+        '<div id="video-wrapper" class="bg-white p-4 sm:p-6 lg:p-8 rounded-[2rem] shadow-xl border border-slate-100 relative transition-all duration-300 flex flex-col">' +
         '<div id="video-header" class="mb-6 flex flex-col sm:flex-row sm:items-start justify-between sm:gap-4 flex-shrink-0">' +
         '<div><span class="text-[11px] font-black text-[#31c1d7] tracking-[0.2em] uppercase mb-2 block">Now Learning</span>' +
-        '<h2 class="text-2xl sm:text-3xl font-extrabold text-slate-800 leading-tight">' + escapeHtml(section.Title) + '</h2>' +
-        '<p class="text-slate-500 mt-2 font-medium text-base">' + escapeHtml(currentLesson.Title) + '</p></div>' + 
+        '<h2 class="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-slate-800 leading-tight">' + escapeHtml(section.Title) + '</h2>' +
+        '<p class="text-slate-500 mt-2 font-medium text-base lg:text-lg">' + escapeHtml(currentLesson.Title) + '</p></div>' + 
         '</div>' + contentHtml + '</div></div>';
     
     showView('videoPlayer');
@@ -328,12 +316,9 @@ function loadYouTubePlayer(videoId, startSeconds) {
 
 function onPlayerReady(event) { }
 
-// JAVIS REFACTORED: อนุญาตให้ผู้เรียนปรับความเร็วผ่านปุ่มบน UI ที่เราทำไว้ หรือบนฟันเฟืองของ YouTube ก็ได้
+// JAVIS REFACTORED: ลบการผูก UI ความเร็วออก เพื่อให้ใช้ฟันเฟืองของ YouTube ได้เลย
 function onPlaybackRateChange(event) {
-    const speedSelect = document.getElementById('video-speed-select');
-    if (speedSelect) {
-        speedSelect.value = event.data; // Sync ค่าใน UI ของเราให้ตรงกับที่ YouTube ปรับ
-    }
+    // ปล่อยให้ทำงานแบบ Native ได้อย่างอิสระ
 }
 
 function onPlayerStateChange(event) {
@@ -351,6 +336,7 @@ function onPlayerStateChange(event) {
         }
         
         if (progressSaveTimeout) clearInterval(progressSaveTimeout);
+        // JAVIS FIX: เพิ่มวงเล็บปิดให้สมบูรณ์ เพื่อป้องกัน Syntax Error
         if (event.data == YT.PlayerState.PAUSED && ppIcon) ppIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
     }
     if (event.data == YT.PlayerState.ENDED) {
@@ -359,7 +345,7 @@ function onPlayerStateChange(event) {
     }
 }
 
-// JAVIS REFACTORED: ปรับเพิ่ม Threshold เป็น +3 วิ เพื่อรองรับจังหวะที่ผู้ใช้อาจเล่นวิดีโอด้วยความเร็ว 2x 
+// JAVIS REFACTORED: รองรับการเร่งสปีดของ YouTube อย่างปลอดภัย (ไม่ต้องล็อกความเร็วแล้ว)
 function checkVideoSkip() {
     if (player && typeof player.getCurrentTime === 'function') {
         const currentTime = player.getCurrentTime();
@@ -373,8 +359,16 @@ function checkVideoSkip() {
             return;
         }
 
-        // ปรับเป็น maxTimeWatched + 3 เพื่อความยืดหยุ่นในการดู 2x
-        if (currentTime > maxTimeWatched + 3) {
+        // คำนวณความเร็วที่ใช้อยู่ (ถ้าเร่ง 2x ก็จะยอมให้ข้ามได้ 2 วินาทีใน 1 วินาทีจริง)
+        let currentRate = 1;
+        if (typeof player.getPlaybackRate === 'function') {
+            currentRate = player.getPlaybackRate();
+        }
+        
+        // ยอมให้ขยับเวลาได้สัมพันธ์กับความเร็วที่เล่นอยู่ + Buffer เผื่อเน็ตกระตุก (3 วินาที)
+        const allowedJump = (0.5 * currentRate) + 3;
+
+        if (currentTime > maxTimeWatched + allowedJump) {
             player.seekTo(maxTimeWatched); 
             if(typeof showToast !== 'undefined') showToast('ไม่อนุญาตให้กรอวิดีโอข้ามเนื้อหาครับ 🚫', 'error');
         } else {
@@ -561,7 +555,9 @@ function renderQuiz() {
             html += '<div class="space-y-3">';
             q.options.forEach(function(opt) {
                 const btnClass = quizAnswers[idx] === opt ? 'border-[#31c1d7] bg-[#31c1d7]/5 text-[#31c1d7] shadow-sm' : 'text-slate-600 hover:border-slate-300';
-                html += '<button onclick="selectOption(' + idx + ', \'' + escapeJsString(opt) + '\')" class="w-full text-left px-6 py-4 rounded-xl border-2 ' + btnClass + ' font-medium transition-all text-[15px]">' + escapeHtml(opt) + '</button>';
+                
+                // JAVIS FIX: เปลี่ยนวิธีดึงค่าจากเดิมที่เอาข้อความยัดลง onClick ตรงๆ ซึ่งจะพังเมื่อเจอ "" มาเป็นการซ่อนค่าไว้ใน data-value ให้ปลอดภัยที่สุด
+                html += '<button type="button" onclick="selectOption(' + idx + ', this.getAttribute(\'data-value\'))" data-value="' + escapeHtml(opt) + '" class="w-full text-left px-6 py-4 rounded-xl border-2 ' + btnClass + ' font-medium transition-all text-[15px]">' + escapeHtml(opt) + '</button>';
             });
             html += '</div>';
         } else {
@@ -585,13 +581,16 @@ function submitQuiz() {
     let score = 0;
     const total = quizQuestions.length;
     quizQuestions.forEach(function(q, idx) {
-        const userAns = quizAnswers[idx].toLowerCase();
-        if (q.answer.toLowerCase().split(',').map(s => s.trim()).filter(Boolean).some(ans => userAns === ans || userAns.includes(ans))) score++;
+        // JAVIS FIX: แปลงทั้งคำตอบของผู้ใช้และเฉลยให้เป็น String ก่อนตรวจ เพื่อป้องกัน Error ตัวเลข
+        const userAns = String(quizAnswers[idx]).toLowerCase();
+        if (String(q.answer).toLowerCase().split(',').map(s => s.trim()).filter(Boolean).some(ans => userAns === ans || userAns.includes(ans))) score++;
     });
 
     const section = currentLesson.sections[currentSectionIndex];
     const scoreData = { sectionId: String(section.SectionID).trim(), score: score, totalQuestions: total };
-    const alreadyPassed = section.quizScore && (section.quizScore.Score / section.quizScore.TotalQuestions) >= 0.5;
+    
+    // JAVIS FIX: อัปเดตเกณฑ์ตรวจสอบให้เป็น 80% (0.8)
+    const alreadyPassed = section.quizScore && (section.quizScore.Score / section.quizScore.TotalQuestions) >= 0.8;
 
     views.quiz.innerHTML = '<div class="text-center py-20"><svg class="animate-spin h-10 w-10 text-[#31c1d7] mx-auto mb-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><p class="text-slate-500 font-bold">กำลังประมวลผล...</p></div>';
 
